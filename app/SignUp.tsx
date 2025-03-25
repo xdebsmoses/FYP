@@ -17,7 +17,7 @@ export default function SignUpScreen() {
     }
 
     try {
-      const user = await signUpWithEmail(email, password); // Sign up the user
+      const user = await signUpWithEmail(email, password, name, phone);
       await updateUserProfile(name); // Update the user's name in Firebase
       await sendVerificationEmail(user); // Send verification email
       Alert.alert(

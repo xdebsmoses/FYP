@@ -13,6 +13,11 @@ export default function HomeScreen() {
     ]);
   };
 
+  const navigateToProfile = () => {
+    setMenuVisible(false); // Close dropdown
+    router.push("/Profile"); // Navigate to Community page
+  };
+
   const navigateToCommunity = () => {
     setMenuVisible(false); // Close dropdown
     router.push("/Community"); // Navigate to Community page
@@ -47,6 +52,9 @@ export default function HomeScreen() {
       {/* 📌 Dropdown Menu */}
       {menuVisible && (
         <View style={styles.dropdownMenu}>
+          <TouchableOpacity style={styles.menuItem} onPress={navigateToProfile}>
+            <Text style={styles.menuText}>Profile</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem} onPress={navigateToCommunity}>
             <Text style={styles.menuText}>Community</Text>
           </TouchableOpacity>

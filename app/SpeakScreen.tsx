@@ -9,7 +9,10 @@ import {
 } from "react-native";
 import { Audio } from "expo-av";
 import { recordSpeech } from "../functions/recordSpeech";
-import { transcribeSpeech } from "../functions/transcribeSpeech";
+import { auth } from "../firebaseconfig";
+import { getFirestore, doc, getDoc } from "firebase/firestore";
+import { transcribeSpeech, saveTranscriptToFirestore, checkTriggerWords } from "../functions/transcribeSpeech";
+import { notifyEmergencyContacts } from "../functions/notifications";
 import { Ionicons } from "@expo/vector-icons";
 
 const SpeakScreen = () => {
@@ -18,16 +21,33 @@ const SpeakScreen = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  // ✅ Define trigger words
+  const TRIGGER_WORDS = ["help", "emergency", "danger", "i'm scared"];
+
   const handleRecordToggle = async () => {
     if (isRecording) {
-      // Stop and transcribe
       setIsRecording(false);
       setIsLoading(true);
+  
+      console.log("🎙️ Stopping recording and transcribing...");
       const text = await transcribeSpeech(audioRecordingRef);
-      if (text) setTranscript(text);
+      console.log("📄 Transcribed text:", text);
+  
+      if (text) {
+        setTranscript(text);
+        await saveTranscriptToFirestore(text);
+        console.log("✅ Transcript saved to Firestore");
+  
+        const hasTrigger = await checkTriggerWords(text);
+        console.log("🚨 Trigger detected:", hasTrigger);
+        
+        if (hasTrigger) {
+          await notifyEmergencyContacts();
+        }
+      }
+  
       setIsLoading(false);
     } else {
-      // Start recording
       await recordSpeech(audioRecordingRef, setIsRecording, false);
     }
   };

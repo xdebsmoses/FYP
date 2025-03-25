@@ -19,8 +19,11 @@ export const recordSpeech = async (
       if (status?.isRecording || status?.isDoneRecording) {
         await audioRecordingRef.current.stopAndUnloadAsync();
       }
-      audioRecordingRef.current = null; // ✅ fully release it
+      audioRecordingRef.current = null; //  fully release it
     }
+
+    // Now create a new instance
+    const newRecording = new Audio.Recording();
 
     // 🎤 Request mic permission if not already granted
     let permissionResponse: Audio.PermissionResponse | null = null;

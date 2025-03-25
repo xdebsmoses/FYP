@@ -1,18 +1,33 @@
 // authService.js
 import { auth } from './firebaseconfig';
+import { getFirestore, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, sendEmailVerification} from 'firebase/auth';
 
+const db = getFirestore(); // initialize Firestore
+
 // Sign Up
-// Sign-Up with Email and Password
-export const signUpWithEmail = async (email, password) => {
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      return userCredential.user; // Return the user object
-    } catch (error) {
-      throw error; // Pass error to the UI
-    }
-  };
+export const signUpWithEmail = async (email, password, name, phone) => {
+  if (!email || !password || !name || !phone) {
+    throw new Error("All fields are required.");
+  }
+
+  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+  const user = userCredential.user;
+
+  await updateProfile(user, { displayName: name });
+  await sendEmailVerification(user);
+
+  await setDoc(doc(getFirestore(), "users", user.uid), {
+    name,
+    email,
+    phone,
+    createdAt: serverTimestamp(),
+    emergencyContacts: []
+  });
+
+  return user;
+};
   
   // Send Email Verification
   export const sendVerificationEmail = async (user) => {

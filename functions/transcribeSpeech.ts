@@ -1,18 +1,21 @@
 import { Audio } from "expo-av";
+import { auth } from "../firebaseconfig";
+import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore"; // ✅ also removed unused getDoc
 import { MutableRefObject } from "react";
 import * as FileSystem from "expo-file-system";
 import { Platform } from "react-native";
-import * as Device from "expo-device";
 import { readBlobAsBase64 } from "./readBlobAsBase64";
 
+const firestore = getFirestore(); // ✅ Add this line
+
 interface SpeechToTextResponse {
-    results?: {
-      alternatives?: {
-        transcript: string;
-        confidence?: number;
-      }[];
+  results?: {
+    alternatives?: {
+      transcript: string;
+      confidence?: number;
     }[];
-  }
+  }[];
+}
 
 export const transcribeSpeech = async (
   audioRecordingRef: MutableRefObject<Audio.Recording | null>
@@ -53,7 +56,7 @@ export const transcribeSpeech = async (
       languageCode: "en-US",
     };
 
-    const LOCAL_IP = "10.76.71.26";
+    const LOCAL_IP = "10.76.71.143";
     const serverUrl = `http://${LOCAL_IP}:4000/speech-to-text`;
 
     const response = await fetch(serverUrl, {
@@ -70,4 +73,28 @@ export const transcribeSpeech = async (
     console.error("Transcription failed:", error);
     return undefined;
   }
+};
+
+// ✅ Save transcript to Firestore
+export const saveTranscriptToFirestore = async (transcript: string) => {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  const userRef = doc(firestore, "users", user.uid);
+  await setDoc(
+    userRef,
+    {
+      lastTranscript: transcript,
+      lastUpdated: Date.now(),
+    },
+    { merge: true }
+  );
+};
+
+// ✅ Trigger word detection
+const TRIGGER_WORDS = ["help", "emergency", "danger", "i'm scared"];
+
+export const checkTriggerWords = async (text: string): Promise<boolean> => {
+  const lower = text.toLowerCase();
+  return TRIGGER_WORDS.some((word) => lower.includes(word));
 };

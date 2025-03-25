@@ -32,3 +32,15 @@ build/
 
 # MacOS
 .DS_Store
+node_modules
+
+# Ignore node and cache directories
+node_modules/
+.expo/
+.expo-shared/
+dist/
+build/
+.DS_Store
+.env
+*.log
+node_modules/

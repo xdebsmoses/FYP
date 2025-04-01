@@ -28,6 +28,11 @@ export default function HomeScreen() {
     router.push("/maps"); // Navigate to Community page
   };
 
+  const navigateToAI = () => {
+    setMenuVisible(false); // Close dropdown
+    router.push("/chatbot"); // Navigate to Community page
+  };
+
   const navigateToSpeak = () => {
     setMenuVisible(false); // Close dropdown
     router.push("/SpeakScreen"); // Navigate to Community page
@@ -57,6 +62,9 @@ export default function HomeScreen() {
           </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem} onPress={navigateToCommunity}>
             <Text style={styles.menuText}>Community</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.menuItem} onPress={navigateToAI}>
+            <Text style={styles.menuText}>AI</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem} onPress={navigateToMaps}>
             <Text style={styles.menuText}>Maps</Text>

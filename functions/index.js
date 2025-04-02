@@ -9,8 +9,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 var __generator = (this && this.__generator) || function (thisArg, body) {
-    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g = Object.create((typeof Iterator === "function" ? Iterator : Object).prototype);
-    return g.next = verb(0), g["throw"] = verb(1), g["return"] = verb(2), typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
     function verb(n) { return function (v) { return step([n, v]); }; }
     function step(op) {
         if (f) throw new TypeError("Generator is already executing.");
@@ -55,9 +55,47 @@ var formatPhoneNumber = function (phone) {
         return "+44".concat(trimmed.slice(1));
     return trimmed;
 };
+//send email
+app.post('/send-email', function (req, res) { return __awaiter(void 0, void 0, void 0, function () {
+    var _a, name, email, subject, message, response, result, error_1;
+    return __generator(this, function (_b) {
+        switch (_b.label) {
+            case 0:
+                _a = req.body, name = _a.name, email = _a.email, subject = _a.subject, message = _a.message;
+                _b.label = 1;
+            case 1:
+                _b.trys.push([1, 4, , 5]);
+                return [4 /*yield*/, fetch('https://api.emailjs.com/api/v1.0/email/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            service_id: 'service_scxm8hv',
+                            template_id: 'template_bstnkb7',
+                            user_id: 's--PIzv3HKywJoyBD',
+                            template_params: { name: name, email: email, subject: subject, message: message },
+                        }),
+                    })];
+            case 2:
+                response = _b.sent();
+                return [4 /*yield*/, response.text()];
+            case 3:
+                result = _b.sent();
+                res.status(response.status).send(result);
+                return [3 /*break*/, 5];
+            case 4:
+                error_1 = _b.sent();
+                console.error("❌ Email send failed:", error_1.message);
+                res.status(500).send({ error: "Email sending failed", details: error_1.message });
+                return [3 /*break*/, 5];
+            case 5: return [2 /*return*/];
+        }
+    });
+}); });
+
+
 // ✅ Correct POST route
 app.post("/send-alert", function (req, res) { return __awaiter(void 0, void 0, void 0, function () {
-    var _a, contacts, message, results, _i, contacts_1, contact, formatted, response, error_1;
+    var _a, contacts, message, results, _i, contacts_1, contact, formatted, response, error_2;
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
@@ -94,15 +132,15 @@ app.post("/send-alert", function (req, res) { return __awaiter(void 0, void 0, v
                 return [3 /*break*/, 2];
             case 5: return [2 /*return*/, res.status(200).json({ success: true, results: results })];
             case 6:
-                error_1 = _b.sent();
-                console.error("❌ Twilio SMS failed:", error_1.message);
+                error_2 = _b.sent();
+                console.error("❌ Twilio SMS failed:", error_2.message);
                 return [2 /*return*/, res.status(500).json({
                         error: "Failed to send SMS",
                         details: {
-                            status: error_1.status,
-                            code: error_1.code,
-                            message: error_1.message,
-                            moreInfo: error_1.moreInfo,
+                            status: error_2.status,
+                            code: error_2.code,
+                            message: error_2.message,
+                            moreInfo: error_2.moreInfo,
                         },
                     })];
             case 7: return [2 /*return*/];

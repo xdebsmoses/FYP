@@ -18,7 +18,6 @@ import { database, firestore } from "../firebaseconfig";
 import { ref, onValue } from "firebase/database";
 import { collection, getDocs } from "firebase/firestore";
 
-// ------------------ Types ------------------
 
 interface GoogleDirectionsApiResponse {
   status: string;

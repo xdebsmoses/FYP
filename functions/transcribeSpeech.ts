@@ -6,7 +6,7 @@ import * as FileSystem from "expo-file-system";
 import { Platform } from "react-native";
 import { readBlobAsBase64 } from "./readBlobAsBase64";
 
-const firestore = getFirestore(); // ✅ Add this line
+const firestore = getFirestore();
 
 interface SpeechToTextResponse {
   results?: {
@@ -75,7 +75,7 @@ export const transcribeSpeech = async (
   }
 };
 
-// ✅ Save transcript to Firestore
+// Save transcript to Firestore
 export const saveTranscriptToFirestore = async (transcript: string) => {
   const user = auth.currentUser;
   if (!user) return;
@@ -91,8 +91,7 @@ export const saveTranscriptToFirestore = async (transcript: string) => {
   );
 };
 
-// ✅ Trigger word detection
-const TRIGGER_WORDS = ["help", "emergency", "danger", "i'm scared"];
+const TRIGGER_WORDS = ["help", "emergency", "danger", "i'm scared", "stop", "call police"];
 
 export const checkTriggerWords = async (text: string): Promise<boolean> => {
   const lower = text.toLowerCase();

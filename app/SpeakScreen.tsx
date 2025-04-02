@@ -21,8 +21,8 @@ const SpeakScreen = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // ✅ Define trigger words
-  const TRIGGER_WORDS = ["help", "emergency", "danger", "i'm scared"];
+  // Define trigger words
+  const TRIGGER_WORDS = ["help", "emergency", "danger", "i'm scared", "call police", "stop"];
 
   const handleRecordToggle = async () => {
     if (isRecording) {

@@ -1,426 +1,376 @@
-import React, { useEffect, useState, useRef } from "react";
+// SafeRouteMap.tsx (restructured and commented)
+import React, { useEffect, useState, useRef } from "react"
 import {
   View,
-  StyleSheet,
-  TextInput,
-  Button,
-  Alert,
   Text,
-  FlatList,
+  TextInput,
   TouchableOpacity,
-  Linking,
+  StyleSheet,
+  Alert,
   Platform,
-} from "react-native";
-import MapView, { Polyline, Marker, PROVIDER_DEFAULT } from "react-native-maps";
-import * as Location from "expo-location";
-import axios from "axios";
-import { database, firestore } from "../firebaseconfig";
-import { ref, onValue } from "firebase/database";
-import { collection, getDocs } from "firebase/firestore";
+  ScrollView,
+  Linking,
+} from "react-native"
+import { SafeAreaView } from 'react-native-safe-area-context';
+import MapView, { Marker, Polyline } from "react-native-maps"
+import * as Location from "expo-location"
+import { Ionicons } from "@expo/vector-icons"
+import { useNavigation } from "@react-navigation/native";
+import axios from "axios"
+import { database, firestore } from "../firebaseconfig"
+import { ref, onValue } from "firebase/database"
+import { collection, getDocs } from "firebase/firestore"
 
-// ------------------ Types ------------------
+// Google Maps API Key
+const GOOGLE_MAPS_API_KEY = "AIzaSyAMEtUQMAfYifZOktg_QrGDzuUfbxOBkSs"
 
-interface GoogleDirectionsApiResponse {
-  status: string;
-  routes: {
-    overview_polyline: { points: string };
-    legs: { duration: { value: number } }[];
-  }[];
-}
+// Default fallback location (Nottingham)
+const fallbackLocation = { latitude: 52.9545, longitude: -1.1587 }
 
-// ------------------ Helper Functions ------------------
+export default function SafeRouteMap() {
+  const [userLocation, setUserLocation] = useState(fallbackLocation) // user's current location
+  const [destination, setDestination] = useState("") // destination string
+  const [dangerZones, setDangerZones] = useState<any[]>([]) // Firebase and Firestore danger zones
+  const [routes, setRoutes] = useState<any[]>([]) // route options from Google Directions API
+  const [selectedRouteIndex, setSelectedRouteIndex] = useState<number | null>(null) // selected route index
+  const mapRef = useRef<MapView>(null) // reference to the map
+  const navigation = useNavigation();
 
-function decodePolyline(encoded: string, precision = 5) {
-  let index = 0, lat = 0, lng = 0;
-  const coordinates: { latitude: number; longitude: number }[] = [];
-  let shift = 0, result = 0, byte = 0;
-  const factor = Math.pow(10, precision);
-
-  while (index < encoded.length) {
-    shift = 0;
-    result = 0;
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
-    const deltaLat = (result & 1) ? ~(result >> 1) : (result >> 1);
-    lat += deltaLat;
-
-    shift = 0;
-    result = 0;
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
-    const deltaLng = (result & 1) ? ~(result >> 1) : (result >> 1);
-    lng += deltaLng;
-
-    coordinates.push({ latitude: lat / factor, longitude: lng / factor });
-  }
-  return coordinates;
-}
-
-function getDistance(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const toRad = (value: number) => (value * Math.PI) / 180;
-  const R = 6371e3;
-  const φ1 = toRad(lat1);
-  const φ2 = toRad(lat2);
-  const Δφ = toRad(lat2 - lat1);
-  const Δλ = toRad(lng2 - lng1);
-  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-function calculateRiskScore(
-  routeCoordinates: { latitude: number; longitude: number }[],
-  dangerZones: { latitude: number; longitude: number; severity: number }[]
-) {
-  let riskScore = 0;
-  const threshold = 100;
-  for (const zone of dangerZones) {
-    for (const point of routeCoordinates) {
-      const d = getDistance(point.latitude, point.longitude, zone.latitude, zone.longitude);
-      if (d < threshold) {
-        riskScore += zone.severity;
-        break;
-      }
-    }
-  }
-  return riskScore;
-}
-
-function secondsToHms(totalSeconds: number) {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const hDisplay = h > 0 ? `${h} hr${h > 1 ? "s" : ""} ` : "";
-  const mDisplay = m > 0 ? `${m} min${m > 1 ? "s" : ""}` : "";
-  return (hDisplay + mDisplay).trim() || "0 mins";
-}
-
-function openDirections(
-  origin: { latitude: number; longitude: number },
-  destination: { latitude: number; longitude: number }
-) {
-  const lat1 = origin.latitude;
-  const lng1 = origin.longitude;
-  const lat2 = destination.latitude;
-  const lng2 = destination.longitude;
-
-  if (Platform.OS === "ios") {
-    const appleMapsUrl = `maps://?saddr=${lat1},${lng1}&daddr=${lat2},${lng2}&dirflg=d`;
-    Linking.openURL(appleMapsUrl).catch((err) => {
-      console.error("Error opening Apple Maps:", err);
-    });
-  } else {
-    const googleMapsAppUrl = `comgooglemaps://?saddr=${lat1},${lng1}&daddr=${lat2},${lng2}&directionsmode=driving`;
-    const googleMapsWebUrl = `https://www.google.com/maps/dir/?api=1&origin=${lat1},${lng1}&destination=${lat2},${lng2}`;
-    Linking.openURL(googleMapsAppUrl).catch(() => {
-      Linking.openURL(googleMapsWebUrl);
-    });
-  }
-}
-
-// ------------------ Main Component ------------------
-
-const GOOGLE_MAPS_API_KEY = "AIzaSyAMEtUQMAfYifZOktg_QrGDzuUfbxOBkSs";
-const fallbackLocation = { latitude: 52.9545, longitude: -1.1587 };
-
-const SafeRouteMap = () => {
-  const [dangerZones, setDangerZones] = useState<
-    { latitude: number; longitude: number; severity: number; description: string }[]
-  >([]);
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [destination, setDestination] = useState("");
-  const [routes, setRoutes] = useState<
-    {
-      coordinates: { latitude: number; longitude: number }[];
-      riskScore: number;
-      color: string;
-      duration: string;
-    }[]
-  >([]);
-  const [selectedRouteIndex, setSelectedRouteIndex] = useState<number | null>(null);
-  const mapRef = useRef<MapView>(null);
-
+  // On mount: get user location and fetch danger zones
   useEffect(() => {
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== "granted") {
-        Alert.alert("Permission denied", "Location permission is required.");
-        setUserLocation(fallbackLocation);
-        return;
+        Alert.alert("Permission denied", "Location permission is required.")
+        return
       }
-      try {
-        const location = await Location.getCurrentPositionAsync({});
-        setUserLocation({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-        });
-      } catch (error) {
-        console.error("Error getting location:", error);
-        setUserLocation(fallbackLocation);
-      }
-    })();
-  }, []);
+      const location = await Location.getCurrentPositionAsync({})
+      setUserLocation({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      })
+    })()
 
-  useEffect(() => {
-    const dangerRef = ref(database, "danger_zones");
-    onValue(dangerRef, (snapshot) => {
-      const data = snapshot.val();
+    // Get danger zones from Realtime DB
+    const dbRef = ref(database, "danger_zones")
+    onValue(dbRef, (snapshot) => {
+      const data = snapshot.val()
       if (data) {
         const formatted = Object.keys(data).map((key) => ({
-          latitude: data[key].latitude,
-          longitude: data[key].longitude,
-          severity: data[key].severity,
-          description: data[key].description,
-        }));
-        setDangerZones(formatted);
+          ...data[key],
+        }))
+        setDangerZones(formatted)
       }
-    });
+    })
 
-    const fetchCommunityReports = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(firestore, "community_reports"));
-        const reports = querySnapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            latitude: data.latitude,
-            longitude: data.longitude,
-            severity: data.severity ?? 1,
-            description: data.message || "Community report",
-          };
-        });
-        setDangerZones((prev) => [...prev, ...reports]);
-      } catch (error) {
-        console.error("Error fetching community reports:", error);
-      }
-    };
-
-    fetchCommunityReports();
-  }, []);
-
-  const searchRoute = async () => {
-    if (!userLocation || !destination) {
-      Alert.alert("Missing Info", "Make sure both location and destination are set.");
-      return;
+    // Fetch additional reports from Firestore
+    const fetchFirestoreReports = async () => {
+      const snapshot = await getDocs(collection(firestore, "community_reports"))
+      const reports = snapshot.docs.map((doc) => ({
+        ...doc.data(),
+        severity: doc.data().severity ?? 1,
+        description: doc.data().message || "Community report",
+      }))
+      setDangerZones((prev) => [...prev, ...reports])
     }
 
-    const origin = `${userLocation.latitude},${userLocation.longitude}`;
-    const dest = encodeURIComponent(destination);
-    const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${dest}&alternatives=true&key=${GOOGLE_MAPS_API_KEY}`;
+    fetchFirestoreReports()
+  }, [])
 
+  // Decode polyline returned from Google API
+  const decodePolyline = (encoded: string) => {
+    let index = 0, lat = 0, lng = 0, coordinates = []
+    const factor = 1e5
+    while (index < encoded.length) {
+      let result = 0, shift = 0, b
+      do {
+        b = encoded.charCodeAt(index++) - 63
+        result |= (b & 0x1f) << shift
+        shift += 5
+      } while (b >= 0x20)
+      const dlat = result & 1 ? ~(result >> 1) : result >> 1
+      lat += dlat
+      result = shift = 0
+      do {
+        b = encoded.charCodeAt(index++) - 63
+        result |= (b & 0x1f) << shift
+        shift += 5
+      } while (b >= 0x20)
+      const dlng = result & 1 ? ~(result >> 1) : result >> 1
+      lng += dlng
+      coordinates.push({ latitude: lat / factor, longitude: lng / factor })
+    }
+    return coordinates
+  }
+
+  // Compute risk score based on proximity to danger zones
+  const calculateRiskScore = (coords: any[]) => {
+    let score = 0
+    const threshold = 100
+    for (const zone of dangerZones) {
+      for (const point of coords) {
+        const dx = point.latitude - zone.latitude
+        const dy = point.longitude - zone.longitude
+        const d = Math.sqrt(dx * dx + dy * dy) * 111000
+        if (d < threshold) {
+          score += zone.severity
+          break
+        }
+      }
+    }
+    return score
+  }
+
+  // Format duration in human readable format
+  const formatDuration = (seconds: number) => {
+    const min = Math.floor(seconds / 60)
+    const hr = Math.floor(min / 60)
+    return hr ? `${hr} hr ${min % 60} min` : `${min} mins`
+  }
+
+  // Fetch directions from Google API
+  const handleSearch = async () => {
+    if (!destination) return
+    const origin = `${userLocation.latitude},${userLocation.longitude}`
+    const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}&alternatives=true&key=${GOOGLE_MAPS_API_KEY}`
     try {
-      const response = await axios.get(url) as { data: GoogleDirectionsApiResponse };
-      if (response.data.status !== "OK") {
-        Alert.alert("Error", `Could not find routes. (${response.data.status})`);
-        return;
-      }
-
-      const colorArray = ["blue", "green", "orange", "purple", "red", "gray"];
-      const computedRoutes = response.data.routes.map((route, index) => {
-        const coordinates = decodePolyline(route.overview_polyline.points);
-        const riskScore = calculateRiskScore(coordinates, dangerZones);
-
-        let color = colorArray[index % colorArray.length];
-        if (riskScore > 10) color = "red";
-        else if (riskScore > 5) color = "orange";
-
-        const totalSeconds = route.legs.reduce((sum, leg) => sum + leg.duration.value, 0);
-        const duration = secondsToHms(totalSeconds);
-
-        return { coordinates, riskScore, color, duration };
-      });
-
-      setRoutes(computedRoutes);
-      setSelectedRouteIndex(null);
-
-      if (computedRoutes.length > 0 && mapRef.current) {
-        mapRef.current.fitToCoordinates(computedRoutes[0].coordinates, {
-          edgePadding: { top: 50, left: 50, right: 50, bottom: 50 },
-          animated: true,
-        });
-      }
-    } catch (error) {
-      console.error("Error fetching route:", error);
-      Alert.alert("Error", "Failed to fetch routes.");
-    }
-  };
-
-  const handleSelectRoute = (index: number) => {
-    setSelectedRouteIndex(index);
-    if (mapRef.current && routes[index]) {
-      mapRef.current.fitToCoordinates(routes[index].coordinates, {
-        edgePadding: { top: 50, left: 50, right: 50, bottom: 50 },
+      const { data } = await axios.get(url)
+      const colors = ["blue", "green", "orange", "purple", "red"]
+      const paths = data.routes.map((route: any, index: number) => {
+        const coords = decodePolyline(route.overview_polyline.points)
+        return {
+          coordinates: coords,
+          riskScore: calculateRiskScore(coords),
+          color: colors[index % colors.length],
+          duration: formatDuration(route.legs.reduce((sum: number, leg: any) => sum + leg.duration.value, 0)),
+        }
+      })
+      setRoutes(paths)
+      setSelectedRouteIndex(0)
+      mapRef.current?.fitToCoordinates(paths[0].coordinates, {
+        edgePadding: { top: 50, bottom: 50, left: 50, right: 50 },
         animated: true,
-      });
+      })
+    } catch {
+      Alert.alert("Error", "Failed to fetch route.")
     }
-  };
+  }
 
-  const handleNavigate = (index: number) => {
-    if (!userLocation) return;
-    const destinationCoords = routes[index].coordinates.at(-1)!;
-    openDirections(userLocation, destinationCoords);
-  };
+  // Open the selected route in native maps app
+  const openInMaps = () => {
+    if (!userLocation || selectedRouteIndex === null) return
+    const dest = routes[selectedRouteIndex].coordinates.at(-1)
+    const link =
+      Platform.OS === "ios"
+        ? `maps://?saddr=${userLocation.latitude},${userLocation.longitude}&daddr=${dest.latitude},${dest.longitude}`
+        : `https://www.google.com/maps/dir/?api=1&origin=${userLocation.latitude},${userLocation.longitude}&destination=${dest.latitude},${dest.longitude}`
+    Linking.openURL(link)
+  }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.safeArea}>
+      {/* Custom Navbar */}
+      <View style={styles.navbar}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.navIcon}>
+          <Ionicons name="arrow-back-outline" size={26} color="#00FFFF" />
+        </TouchableOpacity>
+        <Text style={[styles.navTitle, { color: "#fff" }]}>
+          Safety <Text style={{ color: "#00FFFF" }}>Group Chats</Text>
+        </Text>
+        <View style={{ width: 26 }} /> {/* Placeholder for symmetry */}
+      </View>
+      {/* Map with markers and polylines */}
       <MapView
         ref={mapRef}
         style={styles.map}
-        provider={PROVIDER_DEFAULT}
         initialRegion={{
-          latitude: userLocation?.latitude ?? fallbackLocation.latitude,
-          longitude: userLocation?.longitude ?? fallbackLocation.longitude,
+          ...userLocation,
           latitudeDelta: 0.05,
           longitudeDelta: 0.05,
         }}
       >
-        {dangerZones.map((zone, index) => (
+        {/* User marker */}
+        {userLocation && (
+          <Marker coordinate={userLocation} title="You are here" pinColor="#00FFFF" />
+        )}
+
+        {/* Danger zones */}
+        {dangerZones.map((z, i) => (
           <Marker
-            key={`danger-${index}`}
-            coordinate={{ latitude: zone.latitude, longitude: zone.longitude }}
-            title={`Risk Level: ${zone.severity}`}
-            description={zone.description}
-            pinColor={zone.severity >= 4 ? "red" : "orange"}
+            key={i}
+            coordinate={{ latitude: z.latitude, longitude: z.longitude }}
+            pinColor={z.severity >= 4 ? "red" : "orange"}
+            title={`Severity ${z.severity}`}
+            description={z.description}
           />
         ))}
 
-        {userLocation && (
-          <Marker coordinate={userLocation} title="You are here" pinColor="blue" />
-        )}
-
-        {routes.length > 0 && (
-          <Marker
-            coordinate={
-              selectedRouteIndex !== null
-                ? routes[selectedRouteIndex].coordinates.at(-1)!
-                : routes[0].coordinates.at(-1)!
-            }
-            title="Destination"
-            pinColor="purple"
-          />
-        )}
-
-        {routes.map((route, index) => (
+        {/* Routes */}
+        {routes.map((r, i) => (
           <Polyline
-            key={`route-${index}`}
-            coordinates={route.coordinates}
-            strokeColor={route.color}
-            strokeWidth={selectedRouteIndex === index ? 6 : 4}
+            key={i}
+            coordinates={r.coordinates}
+            strokeColor={r.color}
+            strokeWidth={selectedRouteIndex === i ? 6 : 3}
           />
         ))}
       </MapView>
 
-      <View style={styles.searchContainer}>
+      {/* Search input */}
+      <View style={styles.searchBar}>
         <TextInput
-          style={styles.input}
-          placeholder="Enter destination"
+          placeholder="Enter destination..."
+          placeholderTextColor="#aaa"
           value={destination}
           onChangeText={setDestination}
+          style={styles.input}
         />
-        <Button title="Search Route" onPress={searchRoute} />
+        <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
+          <Text style={styles.searchButtonText}>Search</Text>
+        </TouchableOpacity>
       </View>
 
-      {routes.length > 1 && (
-        <View style={styles.routeListContainer}>
-          <FlatList
-            data={routes}
-            horizontal
-            keyExtractor={(_, i) => i.toString()}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 10 }}
-            renderItem={({ item, index }) => {
-              const isSelected = selectedRouteIndex === index;
-              return (
-                <View style={[styles.routeItem, isSelected && styles.selectedRouteItem]}>
-                  <View style={styles.routeHeader}>
-                    <View style={[styles.colorCircle, { backgroundColor: item.color }]} />
-                    <TouchableOpacity onPress={() => handleSelectRoute(index)}>
-                      <Text style={styles.routeTitle}>Route {index + 1}</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.routeDetail}>Risk: {item.riskScore}</Text>
-                  <Text style={styles.routeDetail}>Duration: {item.duration}</Text>
-                  <View style={{ marginTop: 5 }}>
-                    <Button title="Navigate" onPress={() => handleNavigate(index)} />
-                  </View>
-                </View>
-              );
-            }}
-          />
-        </View>
+      {/* Route Cards */}
+      {routes.length > 0 && (
+        <ScrollView horizontal style={styles.routeList} contentContainerStyle={{ padding: 10 }}>
+          {routes.map((r, i) => (
+            <TouchableOpacity
+              key={i}
+              style={[styles.routeCard, selectedRouteIndex === i && styles.selectedCard]}
+              onPress={() => setSelectedRouteIndex(i)}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+                <View style={[styles.colorCircle, { backgroundColor: r.color }]} />
+                <Text style={styles.cardTitle}>Route {i + 1}</Text>
+              </View>
+              <Text style={styles.cardText}>Duration: {r.duration}</Text>
+              <Text style={styles.cardText}>Risk Score: {r.riskScore}</Text>
+              <TouchableOpacity style={styles.navigateBtn} onPress={openInMaps}>
+                <Text style={styles.navigateBtnText}>Navigate</Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       )}
-    </View>
-  );
-};
-
-export default SafeRouteMap;
-
+    </SafeAreaView>
+  )
+}
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: "#0B141E" },
   map: { flex: 1 },
-  searchContainer: {
+  searchBar: {
     position: "absolute",
-    top: 40,
-    left: 10,
-    right: 10,
+    top: 150,
+    left: 20,
+    right: 20,
     flexDirection: "row",
+    backgroundColor: "#19232F",
+    borderRadius: 10,
+    padding: 8,
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.9)",
-    borderRadius: 8,
-    padding: 10,
-    elevation: 5,
   },
   input: {
     flex: 1,
-    padding: 8,
-    borderColor: "#ccc",
+    padding: 10,
+    color: "#fff",
+    backgroundColor: "#0B141E",
+    borderRadius: 6,
+    fontSize: 14,
+    fontFamily: "Poppins",
+    borderColor: "#00FFFF",
     borderWidth: 1,
-    borderRadius: 4,
-    marginRight: 8,
   },
-  routeListContainer: {
+  searchButton: {
+    marginLeft: 10,
+    backgroundColor: "#00FFFF",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+  },
+  searchButtonText: {
+    color: "#000",
+    fontWeight: "600",
+    fontFamily: "Poppins",
+  },
+  routeList: {
     position: "absolute",
     bottom: 20,
-    left: 0,
-    right: 0,
   },
-  routeItem: {
-    backgroundColor: "#fff",
-    marginHorizontal: 5,
+  routeCard: {
+    backgroundColor: "#19232F",
+    borderRadius: 10,
     padding: 12,
-    borderRadius: 8,
-    width: 160,
+    marginHorizontal: 6,
+    width: 180,
+    elevation: 4,
     shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 2 },
-    marginBottom: 10,
   },
-  selectedRouteItem: {
-    borderWidth: 2,
-    borderColor: "#007AFF",
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#0B141E",
   },
-  routeHeader: {
+  
+  navbar: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 5,
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: "#19232F",
+    borderBottomWidth: 1,
+    borderBottomColor: "#0B141E",
+    zIndex: 10,
   },
-  colorCircle: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    marginRight: 8,
+  
+  navIcon: {
+    padding: 4,
   },
-  routeTitle: {
+  
+  navTitle: {
+    fontSize: 20,
+    fontFamily: "Poppins",
+    color: "#fff",
+  },
+  
+  accent: {
+    color: "#00FFFF",
+  },
+  selectedCard: {
+    borderColor: "#00FFFF",
+    borderWidth: 2,
+  },
+  cardTitle: {
     fontSize: 16,
     fontWeight: "bold",
+    color: "#fff",
+    fontFamily: "Poppins",
+    marginBottom: 6,
   },
-  routeDetail: {
+  cardText: {
+    color: "#ccc",
     fontSize: 14,
-    marginVertical: 2,
+    fontFamily: "Poppins",
+    marginBottom: 4,
   },
-});
+  navigateBtn: {
+    marginTop: 8,
+    backgroundColor: "#00FFFF",
+    borderRadius: 6,
+    paddingVertical: 6,
+    alignItems: "center",
+  },
+  colorCircle: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#00FFFF", // fallback color
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: "#ccc", // helps visibility
+  },
+  navigateBtnText: {
+    color: "#000",
+    fontWeight: "600",
+    fontFamily: "Poppins",
+  },
+})

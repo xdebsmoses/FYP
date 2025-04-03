@@ -1,9 +1,20 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, TextInput, FlatList, Button, TouchableOpacity, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  SafeAreaView,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
+import { Ionicons } from '@expo/vector-icons';
 import { firestore, auth } from "../firebaseconfig";
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { collection, getDocs, addDoc } from "firebase/firestore";
-import { useNavigation, useFocusEffect } from "@react-navigation/native"; // Import useFocusEffect
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 interface Chat {
   id: string;
@@ -21,6 +32,7 @@ export type RootStackParamList = {
 const GroupChatListPage = () => {
   const [chats, setChats] = useState<Chat[]>([]);
   const [newChatName, setNewChatName] = useState("");
+  const [search, setSearch] = useState("");
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [user, setUser] = useState("");
 
@@ -31,11 +43,9 @@ const GroupChatListPage = () => {
         setUser(currentUser.email || "Anonymous");
       }
     };
-
     fetchUser();
   }, []);
 
-  // Fetch chats when the screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
       const fetchChats = async () => {
@@ -50,7 +60,6 @@ const GroupChatListPage = () => {
           console.error("Error fetching chats:", error);
         }
       };
-
       fetchChats();
     }, [])
   );
@@ -73,20 +82,47 @@ const GroupChatListPage = () => {
     }
   };
 
+  const filteredChats = chats.filter(chat =>
+    chat.name.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Safety Group Chats</Text>
+    <SafeAreaView style={styles.safeArea}>
+      {/* Custom Navbar */}
+      <View style={styles.navbar}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.navIcon}>
+          <Ionicons name="arrow-back-outline" size={26} color="#00FFFF" />
+        </TouchableOpacity>
+        <Text style={styles.navTitle}>Safety <Text style={styles.accent}>Group Chats</Text></Text>
+        <View style={{ width: 26 }} />
+      </View>
+
+      {/* Create new group chat */}
       <TextInput
         style={styles.input}
-        placeholder="Enter new chat name"
+        placeholder="Enter new chat name..."
+        placeholderTextColor="#888"
         value={newChatName}
         onChangeText={setNewChatName}
       />
-      <Button title="Create New Chat" onPress={createNewChat} />
+      <TouchableOpacity style={styles.createButton} onPress={createNewChat}>
+        <Text style={styles.createButtonText}>+ Create Chat</Text>
+      </TouchableOpacity>
 
+      {/* Search Chat */}
+      <TextInput
+        style={styles.input}
+        placeholder="Search by postcode or name..."
+        placeholderTextColor="#888"
+        value={search}
+        onChangeText={setSearch}
+      />
+
+      {/* List of group chats */}
       <FlatList
-        data={chats}
+        data={filteredChats}
         keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.chatList}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.chatItem}
@@ -97,42 +133,83 @@ const GroupChatListPage = () => {
           </TouchableOpacity>
         )}
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
+export default GroupChatListPage;
+
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    padding: 20,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#0B141E",
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
+  navbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: "#19232F",
+  },
+  navTitle: {
+    fontSize: 20,
+    fontFamily: "Poppins",
+    color: "#fff",
+  },
+  navIcon: {
+    padding: 4,
+  },
+  accent: {
+    color: "#00FFFF",
   },
   input: {
+    backgroundColor: "#19232F",
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: "#fff",
+    fontFamily: "Poppins",
     borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 10,
+    borderColor: "#00FFFF",
+    marginHorizontal: 20,
+    marginTop: 12,
+  },
+  createButton: {
+    backgroundColor: "#00FFFF",
+    marginTop: 10,
     marginBottom: 10,
-    borderRadius: 5,
+    padding: 14,
+    borderRadius: 12,
+    marginHorizontal: 20,
+    alignItems: "center",
+  },
+  createButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#000",
+    fontFamily: "Poppins",
+  },
+  chatList: {
+    padding: 20,
   },
   chatItem: {
-    backgroundColor: "#e0e0e0",
-    padding: 15,
-    borderRadius: 5,
-    marginVertical: 5,
+    backgroundColor: "#19232F",
+    borderRadius: 10,
+    padding: 16,
+    marginBottom: 10,
   },
   chatName: {
     fontSize: 18,
     fontWeight: "bold",
+    color: "#fff",
+    fontFamily: "Poppins",
   },
   createdBy: {
+    color: "#ccc",
     fontSize: 14,
-    color: "#555",
+    marginTop: 4,
+    fontFamily: "Poppins",
   },
 });
-
-export default GroupChatListPage;

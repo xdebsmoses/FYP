@@ -1,8 +1,29 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, TextInput, FlatList, Button, StyleSheet, Switch, TouchableOpacity } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  FlatList,
+  StyleSheet,
+  Switch,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { firestore, auth } from "../firebaseconfig";
-import { collection, onSnapshot, addDoc, deleteDoc, doc } from "firebase/firestore";
-import { useRoute } from "@react-navigation/native";
+import {
+  collection,
+  onSnapshot,
+  addDoc,
+  deleteDoc,
+  doc,
+  query,
+  orderBy,
+} from "firebase/firestore";
+import { useRoute, useNavigation } from "@react-navigation/native";
+import { format } from "date-fns";
 
 interface Message {
   id: string;
@@ -10,15 +31,24 @@ interface Message {
   user: string;
   timestamp: number;
   addedToReports: boolean;
+  postcode?: string;
 }
 
 const ChatRoomPage = () => {
   const route = useRoute();
-  const { chatId, chatName } = route.params as { chatId: string; chatName: string };
+  const navigation = useNavigation();
+  const flatListRef = useRef<FlatList>(null);
+
+  const { chatId, chatName } = route.params as {
+    chatId: string;
+    chatName: string;
+  };
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState("");
   const [addToReports, setAddToReports] = useState(false);
   const [shareEmail, setShareEmail] = useState(true);
+  const [postcode, setPostcode] = useState("");
   const [user, setUser] = useState("");
 
   useEffect(() => {
@@ -31,12 +61,14 @@ const ChatRoomPage = () => {
 
     const fetchMessages = () => {
       const messagesRef = collection(firestore, `group_chats/${chatId}/messages`);
-      const unsubscribe = onSnapshot(messagesRef, (snapshot) => {
+      const q = query(messagesRef, orderBy("timestamp"));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
         const chatMessages: Message[] = snapshot.docs.map((doc) => ({
           ...(doc.data() as Message),
           id: doc.id,
         }));
         setMessages(chatMessages);
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
       });
       return unsubscribe;
     };
@@ -47,115 +79,220 @@ const ChatRoomPage = () => {
   }, [chatId]);
 
   const sendMessage = async () => {
-    if (!messageText) {
+    if (!messageText.trim()) {
       alert("Message cannot be empty.");
       return;
     }
+  
+    if (addToReports && !postcode.trim()) {
+      alert("Please enter a postcode for the report.");
+      return;
+    }
+  
+    const messageData: any = {
+      text: messageText.trim(),
+      user: shareEmail ? user : "Anonymous",
+      timestamp: Date.now(),
+      addedToReports: addToReports,
+    };
+  
+    if (addToReports) {
+      messageData.postcode = postcode.trim();
+    }
+  
     try {
-      await addDoc(collection(firestore, `group_chats/${chatId}/messages`), {
-        text: messageText,
-        user: shareEmail ? user : "Anonymous",
-        timestamp: Date.now(),
-        addedToReports: addToReports,
-      });
+      // Add to group chat messages
+      await addDoc(collection(firestore, `group_chats/${chatId}/messages`), messageData);
+  
+      // If added to reports, also save to community_reports
       if (addToReports) {
         await addDoc(collection(firestore, "community_reports"), {
-          message: messageText,
+          message: messageText.trim(),
           user: shareEmail ? user : "Anonymous",
           timestamp: Date.now(),
+          postcode: postcode.trim(),
         });
       }
+  
       setMessageText("");
       setAddToReports(false);
-      alert("Message sent.");
+      setPostcode("");
+  
     } catch (error) {
       console.error("Error sending message:", error);
+      alert("Failed to send message.");
     }
   };
 
   const deleteMessage = async (messageId: string) => {
     try {
       await deleteDoc(doc(firestore, `group_chats/${chatId}/messages/${messageId}`));
-      alert("Message deleted.");
     } catch (error) {
       console.error("Error deleting message:", error);
     }
   };
 
+  const renderItem = ({ item }: { item: Message }) => {
+    const isUser = item.user === user;
+    return (
+      <View style={[styles.messageItem, isUser && { alignItems: 'flex-end' }]}>
+        <Text style={styles.user}>{item.user}</Text>
+        <View style={styles.bubbleRow}>
+          <View style={[styles.bubble, isUser && styles.userBubble]}>
+            <Text style={styles.messageText}>{item.text}</Text>
+            <Text style={styles.timeText}>{format(new Date(item.timestamp), "h:mm a")}</Text>
+          </View>
+          {isUser && (
+            <TouchableOpacity onPress={() => deleteMessage(item.id)} style={styles.trashIcon}>
+              <Ionicons name="trash-outline" size={18} color="#ff4d4d" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  };
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{chatName}</Text>
+    <SafeAreaView style={styles.container}>
+      {/* Navbar */}
+      <View style={styles.navbar}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back-outline" size={26} color="#00FFFF" />
+        </TouchableOpacity>
+        <Text style={styles.navTitle}>{chatName}</Text>
+        <View style={{ width: 26 }} />
+      </View>
+
       <FlatList
+        ref={flatListRef}
         data={messages}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.messageItem}>
-            <Text>{item.text}</Text>
-            <Text style={styles.user}>Sent by: {item.user}</Text>
-            {item.user === user && (
-              <TouchableOpacity onPress={() => deleteMessage(item.id)}>
-                <Text style={styles.deleteButton}>Delete</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+        renderItem={renderItem}
+        contentContainerStyle={{ padding: 10, paddingBottom: 100 }}
+      />
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={100}
+      >
+        <TextInput
+          style={styles.input}
+          placeholder="Type your message"
+          placeholderTextColor="#888"
+          value={messageText}
+          onChangeText={setMessageText}
+        />
+        <View style={styles.switchRow}>
+          <Switch value={addToReports} onValueChange={setAddToReports} />
+          <Text style={styles.switchLabel}>Add to Reports</Text>
+        </View>
+        {addToReports && (
+          <TextInput
+            style={styles.input}
+            placeholder="Enter postcode for report"
+            placeholderTextColor="#888"
+            value={postcode}
+            onChangeText={setPostcode}
+          />
         )}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Type your message"
-        value={messageText}
-        onChangeText={setMessageText}
-      />
-      <View style={styles.switchContainer}>
-        <Switch value={addToReports} onValueChange={setAddToReports} />
-        <Text>Add to Reports</Text>
-      </View>
-      <View style={styles.switchContainer}>
-        <Switch value={shareEmail} onValueChange={setShareEmail} />
-        <Text>{shareEmail ? "Share Email" : "Send Anonymously"}</Text>
-      </View>
-      <Button title="Send Message" onPress={sendMessage} />
-    </View>
+        <View style={styles.switchRow}>
+          <Switch value={shareEmail} onValueChange={setShareEmail} />
+          <Text style={styles.switchLabel}>Share Email</Text>
+        </View>
+        <TouchableOpacity style={styles.sendButton} onPress={sendMessage}>
+          <Text style={styles.sendButtonText}>Send Message</Text>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: "#f5f5f5",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 10,
-    borderRadius: 5,
-    marginVertical: 10,
-  },
-  messageItem: {
-    backgroundColor: "#e0e0e0",
-    padding: 10,
-    marginVertical: 5,
-    borderRadius: 5,
-  },
-  user: {
-    fontSize: 12,
-    color: "#555",
-  },
-  deleteButton: {
-    color: "red",
-    marginTop: 5,
-    textAlign: "right",
-  },
-  switchContainer: {
+  container: { flex: 1, backgroundColor: "#0B141E" },
+  navbar: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: 10,
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: "#19232F",
+  },
+  navTitle: {
+    fontSize: 18,
+    color: "#fff",
+    fontWeight: "bold",
+    fontFamily: "Poppins",
+  },
+  messageItem: {
+    marginBottom: 10,
+  },
+  user: {
+    color: "#00FFFF",
+    fontSize: 12,
+    marginBottom: 4,
+    fontFamily: "Poppins",
+  },
+  bubbleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  bubble: {
+    backgroundColor: "#19232F",
+    padding: 10,
+    borderRadius: 14,
+    maxWidth: "80%",
+  },
+  userBubble: {
+    backgroundColor: "#0052cc",
+  },
+  messageText: {
+    color: "#fff",
+    fontSize: 15,
+    fontFamily: "Poppins",
+  },
+  timeText: {
+    fontSize: 11,
+    color: "#ccc",
+    marginTop: 4,
+    fontFamily: "Poppins",
+  },
+  trashIcon: {
+    marginLeft: 8,
+  },
+  input: {
+    backgroundColor: "#19232F",
+    color: "#fff",
+    fontSize: 14,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    margin: 10,
+    borderColor: "#00FFFF",
+    borderWidth: 1,
+    fontFamily: "Poppins",
+  },
+  switchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    marginBottom: 10,
+  },
+  switchLabel: {
+    color: "#fff",
+    marginLeft: 10,
+    fontFamily: "Poppins",
+  },
+  sendButton: {
+    margin: 10,
+    padding: 14,
+    backgroundColor: "#00FFFF",
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  sendButtonText: {
+    color: "#000",
+    fontWeight: "600",
+    fontFamily: "Poppins",
   },
 });
 

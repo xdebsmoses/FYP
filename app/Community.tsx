@@ -1,18 +1,26 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, TextInput, FlatList, Button, Alert, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  FlatList,
+  Alert,
+  StyleSheet,
+  TouchableOpacity,
+  SafeAreaView,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { router, useRouter } from 'expo-router'
 import { firestore } from "../firebaseconfig";
-import { collection, getDocs, addDoc } from "firebase/firestore";
+import { collection, getDocs, addDoc, query, orderBy } from "firebase/firestore";
 import axios from "axios";
+import { format } from "date-fns";
 
 interface PostcodeApiResponse {
   status: string;
-  data?: {
-    latitude: number;
-    longitude: number;
-  };
+  data?: { latitude: number; longitude: number };
 }
 
-// Define the shape of a report
 type Report = {
   id: string;
   postcode: string;
@@ -20,215 +28,246 @@ type Report = {
   longitude: number;
   message: string;
   user: string;
+  severity: string;
+  timestamp: number;
 };
 
-const Community = () => {
+const Community = ({ navigation }: any) => {
   const [reports, setReports] = useState<Report[]>([]);
   const [postcode, setPostcode] = useState("");
   const [message, setMessage] = useState("");
+  const [searchPostcode, setSearchPostcode] = useState("");
+  const [selectedDate, setSelectedDate] = useState(""); // for date filtering
   const [user, setUser] = useState("Anonymous");
+  const [severity, setRiskLevel] = useState("Low");
+  const [search, setSearch] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
 
-  // Fetch reports from Firestore
   useEffect(() => {
-    const fetchReports = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(firestore, "community_reports"));
-        const data: Report[] = querySnapshot.docs.map((doc) => {
-          // Cast the data to the expected type (without the id)
-          const reportData = doc.data() as Omit<Report, "id">;
-          return {
-            id: doc.id,
-            postcode: reportData.postcode || "",
-            latitude: reportData.latitude || 0,
-            longitude: reportData.longitude || 0,
-            message: reportData.message || "",
-            user: reportData.user || "Anonymous",
-          };
-        });
-        setReports(data);
-      } catch (error: unknown) {
-        let errorMessage = "Failed to fetch reports.";
-        if (error instanceof Error) {
-          errorMessage = error.message;
-        }
-        console.error("Error fetching community reports:", errorMessage);
-        Alert.alert("Error", errorMessage);
-      }
-    };
-
     fetchReports();
   }, []);
 
-  // Function to convert postcode to coordinates using GetTheData API
+  const fetchReports = async () => {
+    try {
+      const q = query(collection(firestore, "community_reports"), orderBy("timestamp", "asc"));
+      const snapshot = await getDocs(q);
+      const formatted = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Report[];
+      setReports(formatted);
+    } catch {
+      Alert.alert("Error", "Failed to fetch community reports.");
+    }
+  };
+
   const convertPostcodeToCoordinates = async (postcode: string) => {
     try {
-      const formattedPostcode = postcode.replace(/\s/g, ""); // Remove spaces
-      const apiUrl = `https://api.getthedata.com/postcode/${formattedPostcode}`;
-      const response = await axios.get(apiUrl) as { data: PostcodeApiResponse };
-
+      const formatted = postcode.replace(/\s/g, "");
+      const response = await axios.get(`https://api.getthedata.com/postcode/${formatted}`);
       if (response.data.status === "match" && response.data.data) {
-        const { latitude, longitude } = response.data.data;
-        return { latitude, longitude };
-      } else {
-        Alert.alert("Error", "Invalid postcode. Please try again.");
-        return null;
+        return {
+          latitude: response.data.data.latitude,
+          longitude: response.data.data.longitude,
+        };
       }
-    } catch (error: unknown) {
-      let errorMessage = "Failed to convert postcode to coordinates.";
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      console.error("Error fetching coordinates:", errorMessage);
-      Alert.alert("Error", errorMessage);
+      Alert.alert("Error", "Invalid postcode");
+      return null;
+    } catch {
+      Alert.alert("Error", "Failed to fetch coordinates.");
       return null;
     }
   };
 
-  // Submit a new danger report
   const submitReport = async () => {
     if (!postcode || !message) {
-      Alert.alert("Error", "Please enter a postcode and message.");
+      Alert.alert("Error", "Postcode and message required.");
       return;
     }
 
-    const coordinates = await convertPostcodeToCoordinates(postcode);
-    if (!coordinates) return;
+    const coords = await convertPostcodeToCoordinates(postcode);
+    if (!coords) return;
 
     try {
       await addDoc(collection(firestore, "community_reports"), {
         postcode,
-        latitude: coordinates.latitude,
-        longitude: coordinates.longitude,
         message,
         user,
+        severity,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
         timestamp: Date.now(),
       });
-
-      Alert.alert("Success", "Your report has been submitted!");
+      Alert.alert("Success", "Report submitted.");
       setPostcode("");
       setMessage("");
-
-      // Refresh reports
-      const querySnapshot = await getDocs(collection(firestore, "community_reports"));
-      const updatedReports: Report[] = querySnapshot.docs.map((doc) => {
-        const data = doc.data() as Omit<Report, "id">;
-        return {
-          id: doc.id,
-          postcode: data.postcode || "",
-          latitude: data.latitude || 0,
-          longitude: data.longitude || 0,
-          message: data.message || "",
-          user: data.user || "Anonymous",
-        };
-      });
-      setReports(updatedReports);
-    } catch (error: unknown) {
-      let errorMessage = "Could not submit your report.";
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      console.error("Error submitting report:", errorMessage);
-      Alert.alert("Error", errorMessage);
+      setRiskLevel("Low");
+      fetchReports();
+    } catch {
+      Alert.alert("Error", "Could not submit report.");
     }
   };
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Community Safety Reports</Text>
+  const filteredReports = reports.filter((r) =>
+    r.postcode.toLowerCase().includes(search.toLowerCase())
+  );
 
-      {/* Form for submitting reports */}
-      <View style={styles.formContainer}>
-        <Text style={styles.label}>Postcode</Text>
-        <TextInput
-          style={styles.input}
-          value={postcode}
-          onChangeText={setPostcode}
-          placeholder="Enter postcode (e.g., W1A 1AA)"
-        />
-        <Text style={styles.label}>Message</Text>
-        <TextInput
-          style={styles.input}
-          value={message}
-          onChangeText={setMessage}
-          placeholder="Describe the issue"
-          multiline
-        />
-        <Button title="Submit Report" onPress={submitReport} />
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.navbar}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.navIcon}>
+          <Ionicons name="arrow-back-outline" size={26} color="#00FFFF" />
+        </TouchableOpacity>
+        <Text style={styles.navTitle}>
+          <Text>Community </Text>
+          <Text style={styles.accent}>Reports</Text>
+        </Text>
+        <View style={{ width: 26 }} /> {/* Spacer */}
       </View>
 
-      {/* List of reports */}
+      <View style={styles.card}>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter postcode (e.g., W1A 1AA)"
+          placeholderTextColor="#888"
+          value={postcode}
+          onChangeText={setPostcode}
+        />
+        <TextInput
+          style={[styles.input, { height: 80 }]}
+          placeholder="Describe the issue"
+          placeholderTextColor="#888"
+          multiline
+          value={message}
+          onChangeText={setMessage}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Enter risk level (Low, Medium, High)"
+          placeholderTextColor="#888"
+          value={severity}
+          onChangeText={setRiskLevel}
+        />
+        <TouchableOpacity style={styles.button} onPress={submitReport}>
+          <Text style={styles.buttonText}>Submit Report</Text>
+        </TouchableOpacity>
+      </View>
+
+      <TextInput
+        style={[styles.input, { marginTop: 10 }]}
+        placeholder="Search by postcode"
+        placeholderTextColor="#888"
+        value={search}
+        onChangeText={setSearch}
+      />
+      <TextInput
+        style={[styles.input, { marginBottom: 10 }]}
+        placeholder="Filter by date (yyyy-mm-dd)"
+        placeholderTextColor="#888"
+        value={dateFilter}
+        onChangeText={setDateFilter}
+      />
+
       <FlatList
-        data={reports}
+        data={filteredReports}
         keyExtractor={(item) => item.id}
+        contentContainerStyle={{ paddingBottom: 20 }}
         renderItem={({ item }) => (
-          <View style={styles.reportItem}>
-            <Text style={styles.postcode}>{item.postcode}</Text>
-            <Text style={styles.message}>{item.message}</Text>
-            <Text style={styles.user}>Reported by: {item.user}</Text>
+          <View style={styles.report}>
+            <Text style={styles.reportPostcode}>{item.postcode}</Text>
+            <Text style={styles.reportMessage}>{item.message}</Text>
+            <Text style={styles.reportRisk}>Risk: {item.severity}</Text>
+            <Text style={styles.reportUser}>Reported by: {item.user}</Text>
+            <Text style={styles.reportUser}>Date: {format(new Date(item.timestamp), "MMMM d, yyyy")}</Text>
           </View>
         )}
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: "#f8f9fa",
+  container: { flex: 1, backgroundColor: "#0B141E" },
+  navbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    backgroundColor: "#19232F",
+    borderBottomWidth: 1,
+    borderBottomColor: "#0B141E",
   },
-  title: {
+  navIcon: {
+    padding: 4,
+  },
+  navTitle: {
     fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 15,
-    textAlign: "center",
+    fontFamily: "Poppins",
+    color: "#fff",
   },
-  formContainer: {
-    backgroundColor: "#ffffff",
-    padding: 15,
+  accent: {
+    color: "#00FFFF",
+  },
+  card: {
+    backgroundColor: "#19232F",
+    padding: 16,
+    margin: 14,
     borderRadius: 10,
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    shadowColor: "#000",
-    shadowOffset: { height: 2, width: 0 },
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 5,
   },
   input: {
+    backgroundColor: "#0B141E",
+    borderColor: "#00FFFF",
     borderWidth: 1,
-    borderColor: "#ddd",
-    padding: 10,
-    borderRadius: 5,
+    borderRadius: 10,
+    padding: 12,
+    color: "#fff",
     marginBottom: 10,
-    backgroundColor: "#fff",
+    fontFamily: "Poppins",
   },
-  reportItem: {
-    backgroundColor: "#fff",
-    padding: 15,
-    marginVertical: 8,
-    borderRadius: 8,
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    shadowColor: "#000",
-    shadowOffset: { height: 2, width: 0 },
+  button: {
+    backgroundColor: "#00FFFF",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
   },
-  postcode: {
+  buttonText: {
+    fontFamily: "Poppins",
+    fontWeight: "bold",
+    color: "#000",
+    fontSize: 16,
+  },
+  report: {
+    backgroundColor: "#19232F",
+    padding: 16,
+    borderRadius: 10,
+    marginHorizontal: 14,
+    marginBottom: 10,
+  },
+  reportPostcode: {
+    color: "#00FFFF",
     fontSize: 16,
     fontWeight: "bold",
+    fontFamily: "Poppins",
   },
-  message: {
+  reportMessage: {
+    color: "#fff",
     fontSize: 14,
-    marginTop: 5,
+    marginTop: 6,
+    fontFamily: "Poppins",
   },
-  user: {
+  reportRisk: {
+    color: "#ff4d4d",
+    fontSize: 13,
+    fontWeight: "600",
+    marginTop: 4,
+    fontFamily: "Poppins",
+  },
+  reportUser: {
+    color: "#888",
     fontSize: 12,
-    color: "#555",
-    marginTop: 5,
+    marginTop: 6,
+    fontFamily: "Poppins",
   },
 });
 

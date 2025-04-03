@@ -1,18 +1,26 @@
 import React, { useState, useEffect, useRef } from "react";
-import { 
-  View, Text, TextInput, TouchableOpacity, FlatList, ActivityIndicator, 
-  Animated, Keyboard, Dimensions, Platform, StatusBar, StyleSheet
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Keyboard,
+  Dimensions,
+  StyleSheet,
+  Platform,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { set } from "firebase/database";
+import { useNavigation } from "@react-navigation/native";
 
-const API_KEY = "AIzaSyAMr1uOSFSw7U4EXTODbXJHfpbt4Kxgg3A"; // Replace with a valid API key
+const API_KEY = "AIzaSyAMr1uOSFSw7U4EXTODbXJHfpbt4Kxgg3A";
 const genAI = new GoogleGenerativeAI(API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-const { width } = Dimensions.get("window");
 
 interface Message {
   id: string;
@@ -20,51 +28,22 @@ interface Message {
   isUser: boolean;
 }
 
-const chatbot = () => {
+export default function Chatbot() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const scrollViewRef = useRef<FlatList>(null);
-
-  useEffect(() => {
-    const keyboardWillShow = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-      () => {
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }).start();
-      }
-    );
-
-    const keyboardWillHide = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-      () => {
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }).start();
-      }
-    );
-
-    return () => {
-      keyboardWillShow.remove();
-      keyboardWillHide.remove();
-    };
-  }, []);
+  const scrollRef = useRef<FlatList>(null);
+  const navigation = useNavigation();
 
   const generateAIResponse = async (userMessage: string) => {
     try {
-        const prompt = `Respond in English: ${userMessage}`;
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        return response.text();
-    } catch (error) {
-        console.error("Error generating AI response:", error);
-        return "Sorry, I couldn't generate a response.";
+      const prompt = `Respond in English: ${userMessage}`;
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      return response.text();
+    } catch (err) {
+      console.error("Gemini error:", err);
+      return "Sorry, I couldn't generate a response.";
     }
   };
 
@@ -81,121 +60,168 @@ const chatbot = () => {
     setInputText("");
     setIsLoading(true);
 
-    const aiResponse = await generateAIResponse(userMessage.text);
+    const aiText = await generateAIResponse(userMessage.text);
 
     setMessages((prev) => [
-        ...prev, 
-        {
-        id: (Date.now() + 1).toString(), 
-        text: aiResponse, 
-        isUser: false, 
-        },
+      ...prev,
+      { id: `${Date.now()}-ai`, text: aiText, isUser: false },
     ]);
-
     setIsLoading(false);
   };
 
+  useEffect(() => {
+    scrollRef.current?.scrollToEnd({ animated: true });
+  }, [messages]);
+
   const renderMessage = ({ item }: { item: Message }) => (
-    <View style={[styles.messageContainer, item.isUser ? styles.userMessage : styles.aiMessage]}>
-      <Text style={item.isUser ? styles.userText : styles.aiText}>{item.text}</Text>
+    <View
+      style={[
+        styles.messageBubble,
+        item.isUser ? styles.userBubble : styles.botBubble,
+      ]}
+    >
+      {!item.isUser && (
+        <Image
+          source={require("../assets/robot.png")}
+          style={styles.robotIcon}
+        />
+      )}
+      <Text style={item.isUser ? styles.userText : styles.botText}>{item.text}</Text>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-      <View style={styles.header}>
-        <Ionicons name="chatbubbles" size={24} color="#fff" style={styles.headerIcon} />
-        <Text style={styles.headerText}>Chatbot</Text>
-      </View>
-      <FlatList
-        ref={scrollViewRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        renderItem={renderMessage}
-        style={styles.chatList}
-      />
-      {isLoading && <ActivityIndicator size="large" color="#007bff" style={styles.loader} />}
-      <View style={styles.inputContainer}>
-        <TextInput
-          value={inputText}
-          onChangeText={setInputText}
-          placeholder="Type a message..."
-          style={styles.input}
-        />
-        <TouchableOpacity onPress={sendMessage} style={styles.sendButton}>
-          <Ionicons name="send" size={20} color="white" />
+    <SafeAreaView style={styles.safeArea}>
+      {/* Navbar */}
+      <View style={styles.navbar}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.navIcon}>
+          <Ionicons name="arrow-back-outline" size={26} color="#00FFFF" />
         </TouchableOpacity>
+        <Text style={styles.navTitle}>CARE <Text style={styles.accent}>Chatbot</Text></Text>
+        <View style={{ width: 26 }} />
       </View>
+
+      {/* Keyboard Avoiding Wrapper */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        {/* Chat List */}
+        <FlatList
+          ref={scrollRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.chatContent}
+          showsVerticalScrollIndicator={false}
+        />
+
+        {/* Loading Spinner */}
+        {isLoading && <ActivityIndicator color="#00FFFF" style={{ marginVertical: 8 }} />}
+
+        {/* Input Section */}
+        <View style={styles.inputSection}>
+          <TextInput
+            style={styles.input}
+            value={inputText}
+            onChangeText={setInputText}
+            placeholder="Ask me anything..."
+            placeholderTextColor="#888"
+          />
+          <TouchableOpacity onPress={sendMessage} style={styles.sendBtn}>
+            <Ionicons name="send" size={20} color="#000" />
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    padding: 16,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#0B141E",
   },
-  header: {
+  navbar: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#007bff",
-    padding: 15,
-    borderRadius: 10,
+    backgroundColor: "#19232F",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#0B141E",
   },
-  headerIcon: {
-    marginRight: 8,
-  },
-  headerText: {
+  navTitle: {
+    fontSize: 20,
     color: "#fff",
-    fontSize: 18,
+    fontFamily: "Poppins",
   },
-  chatList: {
-    flex: 1,
-    marginVertical: 10,
+  accent: {
+    color: "#00FFFF",
   },
-  messageContainer: {
-    padding: 10,
+  navIcon: {
+    padding: 4,
+  },
+  chatContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+  },
+  messageBubble: {
+    maxWidth: "80%",
     borderRadius: 10,
-    marginVertical: 5,
-    maxWidth: "75%",
+    padding: 12,
+    marginVertical: 6,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+    flexShrink: 1,
   },
-  userMessage: {
+  userBubble: {
+    backgroundColor: "#00FFFF",
     alignSelf: "flex-end",
-    backgroundColor: "#007bff",
   },
-  aiMessage: {
+  botBubble: {
+    backgroundColor: "#19232F",
     alignSelf: "flex-start",
-    backgroundColor: "#e0e0e0",
   },
   userText: {
-    color: "#fff",
-  },
-  aiText: {
     color: "#000",
+    fontFamily: "Poppins",
   },
-  loader: {
-    marginVertical: 10,
+  botText: {
+    color: "#fff",
+    fontFamily: "Poppins",
+    marginLeft: 8,
+    flex: 1,
+    flexWrap: "wrap",
+    lineHeight: 20,
   },
-  inputContainer: {
+  inputSection: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 10,
+    backgroundColor: "#19232F",
+    padding: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#0B141E",
   },
   input: {
     flex: 1,
+    backgroundColor: "#0B141E",
+    borderColor: "#00FFFF",
     borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 10,
-    borderRadius: 5,
+    borderRadius: 10,
+    color: "#fff",
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === "ios" ? 10 : 8,
+    fontFamily: "Poppins",
   },
-  sendButton: {
+  sendBtn: {
+    backgroundColor: "#00FFFF",
     marginLeft: 10,
-    padding: 12,
-    backgroundColor: "#007bff",
-    borderRadius: 5,
+    padding: 10,
+    borderRadius: 10,
+  },
+  robotIcon: {
+    width: 30,
+    height: 30,
+    resizeMode: "contain",
   },
 });
-
-export default chatbot;

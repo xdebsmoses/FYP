@@ -1,6 +1,6 @@
 import { Audio } from "expo-av";
 import { auth } from "../firebaseconfig";
-import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore"; // ✅ also removed unused getDoc
+import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
 import { MutableRefObject } from "react";
 import * as FileSystem from "expo-file-system";
 import { Platform } from "react-native";
@@ -56,6 +56,8 @@ export const transcribeSpeech = async (
       languageCode: "en-US",
     };
 
+    //const LOCAL_IP = "10.76.71.143"; INTERNET IP
+    // hotsop ip
     const LOCAL_IP = "10.76.71.143";
     const serverUrl = `http://${LOCAL_IP}:4000/speech-to-text`;
 
@@ -91,9 +93,19 @@ export const saveTranscriptToFirestore = async (transcript: string) => {
   );
 };
 
-const TRIGGER_WORDS = ["help", "emergency", "danger", "i'm scared", "stop", "call police"];
-
 export const checkTriggerWords = async (text: string): Promise<boolean> => {
+  const user = auth.currentUser;
+  if (!user) return false;
+
+  const userRef = doc(firestore, "users", user.uid);
+  const docSnap = await getDoc(userRef);
   const lower = text.toLowerCase();
-  return TRIGGER_WORDS.some((word) => lower.includes(word));
+
+  if (docSnap.exists()) {
+    const userData = docSnap.data();
+    const triggerWords: string[] = userData.triggerWords || [];
+    return triggerWords.some((word) => lower.includes(word.toLowerCase()));
+  }
+
+  return false;
 };

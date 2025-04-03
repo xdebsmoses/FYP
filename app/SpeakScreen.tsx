@@ -3,49 +3,53 @@ import {
   View,
   Text,
   StyleSheet,
-  TextInput,
   Pressable,
   ActivityIndicator,
+  Alert,
+  SafeAreaView,
 } from "react-native";
 import { Audio } from "expo-av";
+import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+
 import { recordSpeech } from "../functions/recordSpeech";
-import { auth } from "../firebaseconfig";
-import { getFirestore, doc, getDoc } from "firebase/firestore";
 import { transcribeSpeech, saveTranscriptToFirestore, checkTriggerWords } from "../functions/transcribeSpeech";
 import { notifyEmergencyContacts } from "../functions/notifications";
-import { Ionicons } from "@expo/vector-icons";
+import { auth } from "../firebaseconfig";
 
-const SpeakScreen = () => {
+export default function SpeakScreen() {
   const audioRecordingRef = useRef<Audio.Recording | null>(new Audio.Recording());
-  const [transcript, setTranscript] = useState("");
+
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const navigation = useNavigation();
 
-  // Define trigger words
+  // 🎙️ Trigger words to listen for
   const TRIGGER_WORDS = ["help", "emergency", "danger", "i'm scared", "call police", "stop"];
 
+  // 🔘 Start or stop recording
   const handleRecordToggle = async () => {
     if (isRecording) {
       setIsRecording(false);
       setIsLoading(true);
-  
-      console.log("🎙️ Stopping recording and transcribing...");
-      const text = await transcribeSpeech(audioRecordingRef);
-      console.log("📄 Transcribed text:", text);
-  
-      if (text) {
-        setTranscript(text);
-        await saveTranscriptToFirestore(text);
-        console.log("✅ Transcript saved to Firestore");
-  
-        const hasTrigger = await checkTriggerWords(text);
-        console.log("🚨 Trigger detected:", hasTrigger);
-        
-        if (hasTrigger) {
+
+      const transcript = await transcribeSpeech(audioRecordingRef);
+
+      if (transcript) {
+        await saveTranscriptToFirestore(transcript);
+
+        const triggerDetected = await checkTriggerWords(transcript);
+
+        if (triggerDetected) {
+          Alert.alert(
+            "⚠️ Trigger Word Detected",
+            "Contacting your emergency contacts...",
+            [{ text: "OK" }]
+          );
           await notifyEmergencyContacts();
         }
       }
-  
+
       setIsLoading(false);
     } else {
       await recordSpeech(audioRecordingRef, setIsRecording, false);
@@ -53,59 +57,106 @@ const SpeakScreen = () => {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.heading}>Welcome to the{"\n"}Speech-to-Text App</Text>
+    <SafeAreaView style={styles.safeArea}>
+      {/* 🔙 Navbar */}
+      <View style={styles.navbar}>
+        <Pressable onPress={() => navigation.goBack()} style={styles.navIcon}>
+          <Ionicons name="arrow-back-outline" size={24} color="#00FFFF" />
+        </Pressable>
+        <Text style={styles.navTitle}>
+          Virtual <Text style={styles.accent}>Listening</Text>
+        </Text>
+        <View style={{ width: 24 }} /> {/* Spacer for symmetry */}
+      </View>
 
-      <TextInput
-        style={styles.transcriptBox}
-        multiline
-        value={transcript}
-        placeholder="Your transcribed text will be shown here"
-        editable={false}
-        placeholderTextColor="#888"
-      />
+      {/* 🎙️ Center Display */}
+      <View style={styles.content}>
+        <Text style={styles.heading}>Tap the mic to start listening</Text>
 
-      <Pressable
-        style={[styles.recordButton, isRecording && styles.recording]}
-        onPress={handleRecordToggle}
-      >
-        {isLoading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Ionicons name="mic" size={32} color="#fff" />
-        )}
-      </Pressable>
-    </View>
+        <Pressable
+          style={[styles.recordButton, isRecording && styles.recording]}
+          onPress={handleRecordToggle}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Ionicons name="mic" size={40} color="#fff" />
+          )}
+        </Pressable>
+
+        <Text style={styles.statusText}>
+          {isRecording
+            ? "Listening..."
+            : isLoading
+            ? "Processing..."
+            : "Press to begin"}
+        </Text>
+      </View>
+    </SafeAreaView>
   );
-};
+}
 
+// 🖌️ Styles
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
-  heading: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#0B141E",
   },
-  transcriptBox: {
-    width: "100%",
-    height: 150,
-    borderRadius: 10,
-    padding: 12,
-    backgroundColor: "#eee",
-    fontSize: 16,
-    color: "#333",
+  navbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 14,
+    backgroundColor: "#19232F",
+    borderBottomWidth: 1,
+    borderBottomColor: "#0B141E",
+  },
+  navIcon: {
+    padding: 4,
+  },
+  navTitle: {
+    fontSize: 20,
+    fontFamily: "Poppins",
+    color: "#fff",
+  },
+  accent: {
+    color: "#00FFFF",
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 30,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heading: {
+    color: "#fff",
+    fontSize: 22,
+    textAlign: "center",
+    marginBottom: 30,
+    fontFamily: "Poppins",
   },
   recordButton: {
-    marginTop: 30,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     backgroundColor: "red",
-    padding: 20,
-    borderRadius: 50,
-    elevation: 4,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 5,
   },
   recording: {
     backgroundColor: "darkred",
   },
+  statusText: {
+    marginTop: 20,
+    color: "#aaa",
+    fontSize: 16,
+    fontFamily: "Poppins",
+  },
 });
-
-export default SpeakScreen;

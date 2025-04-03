@@ -1,11 +1,12 @@
-import { Stack } from 'expo-router';
+import { Stack } from "expo-router"
 
 export default function Layout() {
   return (
-    <Stack>
-      <Stack.Screen name="Login" options={{ headerShown: false }} />
-      <Stack.Screen name="SignUp" options={{ headerShown: false }} />
-      <Stack.Screen name="Home" options={{ headerShown: false }} />
-    </Stack>
-  );
+    <Stack
+      screenOptions={{
+        headerShown: false, // 👈 hides top header for all screens
+        animation: "fade",
+      }}
+    />
+  )
 }

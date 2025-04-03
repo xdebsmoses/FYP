@@ -34,15 +34,19 @@ interface Message {
   postcode?: string;
 }
 
-const ChatRoomPage = () => {
+type ChatItem =
+  | { type: "date"; date: string }
+  | (Message & { type?: "message" });
+
+const isDateItem = (item: ChatItem): item is { type: "date"; date: string } => {
+  return item.type === "date";
+};
+
+export default function ChatRoomPage() {
   const route = useRoute();
   const navigation = useNavigation();
   const flatListRef = useRef<FlatList>(null);
-
-  const { chatId, chatName } = route.params as {
-    chatId: string;
-    chatName: string;
-  };
+  const { chatId, chatName } = route.params as { chatId: string; chatName: string };
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState("");
@@ -83,28 +87,26 @@ const ChatRoomPage = () => {
       alert("Message cannot be empty.");
       return;
     }
-  
+
     if (addToReports && !postcode.trim()) {
       alert("Please enter a postcode for the report.");
       return;
     }
-  
+
     const messageData: any = {
       text: messageText.trim(),
       user: shareEmail ? user : "Anonymous",
       timestamp: Date.now(),
       addedToReports: addToReports,
     };
-  
+
     if (addToReports) {
       messageData.postcode = postcode.trim();
     }
-  
+
     try {
-      // Add to group chat messages
       await addDoc(collection(firestore, `group_chats/${chatId}/messages`), messageData);
-  
-      // If added to reports, also save to community_reports
+
       if (addToReports) {
         await addDoc(collection(firestore, "community_reports"), {
           message: messageText.trim(),
@@ -113,11 +115,10 @@ const ChatRoomPage = () => {
           postcode: postcode.trim(),
         });
       }
-  
+
       setMessageText("");
       setAddToReports(false);
       setPostcode("");
-  
     } catch (error) {
       console.error("Error sending message:", error);
       alert("Failed to send message.");
@@ -132,10 +133,34 @@ const ChatRoomPage = () => {
     }
   };
 
-  const renderItem = ({ item }: { item: Message }) => {
+  const groupMessagesByDate = (messages: Message[]): ChatItem[] => {
+    const grouped: { [date: string]: Message[] } = {};
+
+    messages.forEach((msg) => {
+      const date = format(new Date(msg.timestamp), "MMMM d, yyyy");
+      if (!grouped[date]) grouped[date] = [];
+      grouped[date].push(msg);
+    });
+
+    const chatItems: ChatItem[] = [];
+    Object.keys(grouped).forEach((date) => {
+      chatItems.push({ type: "date", date });
+      grouped[date].forEach((msg) => chatItems.push({ ...msg, type: "message" }));
+    });
+
+    return chatItems;
+  };
+
+  const chatItems = groupMessagesByDate(messages);
+
+  const renderItem = ({ item }: { item: ChatItem }) => {
+    if (isDateItem(item)) {
+      return <Text style={styles.dateLabel}>{item.date}</Text>;
+    }
+
     const isUser = item.user === user;
     return (
-      <View style={[styles.messageItem, isUser && { alignItems: 'flex-end' }]}>
+      <View style={[styles.messageItem, isUser && { alignItems: "flex-end" }]}>
         <Text style={styles.user}>{item.user}</Text>
         <View style={styles.bubbleRow}>
           <View style={[styles.bubble, isUser && styles.userBubble]}>
@@ -165,8 +190,8 @@ const ChatRoomPage = () => {
 
       <FlatList
         ref={flatListRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
+        data={chatItems}
+        keyExtractor={(_, index) => index.toString()}
         renderItem={renderItem}
         contentContainerStyle={{ padding: 10, paddingBottom: 100 }}
       />
@@ -205,7 +230,7 @@ const ChatRoomPage = () => {
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0B141E" },
@@ -221,6 +246,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#fff",
     fontWeight: "bold",
+    fontFamily: "Poppins",
+  },
+  dateLabel: {
+    textAlign: "center",
+    color: "#aaa",
+    fontSize: 12,
+    marginTop: 10,
+    marginBottom: 4,
     fontFamily: "Poppins",
   },
   messageItem: {
@@ -295,5 +328,3 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins",
   },
 });
-
-export default ChatRoomPage;

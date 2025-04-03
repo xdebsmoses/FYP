@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { doc, setDoc } from "firebase/firestore";
+import { firestore } from "../firebaseconfig";
 import { View, Text, TextInput, Button, Alert, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { signUpWithEmail, sendVerificationEmail, updateUserProfile } from '../authService';
@@ -15,18 +17,27 @@ export default function SignUpScreen() {
       Alert.alert('Error', 'Please fill all the fields');
       return;
     }
-
+  
     try {
       const user = await signUpWithEmail(email, password, name, phone);
-      await updateUserProfile(name); // Update the user's name in Firebase
-      await sendVerificationEmail(user); // Send verification email
+      await updateUserProfile(name);
+      await sendVerificationEmail(user);
+  
+      // ✅ Create user doc with onboardingCompleted set to false
+      await setDoc(doc(firestore, "users", user.uid), {
+        name,
+        email,
+        phone,
+        onboardingCompleted: false, // 👈 flag for onboarding
+      });
+  
       Alert.alert(
         'Success',
         'Account created successfully. Please verify your email before logging in.'
       );
-      router.push('/Login'); // Navigate to login
+      router.push('/Login');
     } catch (error: any) {
-      Alert.alert('Sign-Up Error', error.message); // Show error message
+      Alert.alert('Sign-Up Error', error.message);
     }
   };
 

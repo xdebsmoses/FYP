@@ -6,6 +6,9 @@ import { login, resetPassword } from '../authService'
 import { SafetyButton } from '../components/SafetyButton'
 import { SafetyTextInput } from '../components/SafetyTextInput'
 import { LinkButton } from '../components/LinkButton'
+import { doc, getDoc } from "firebase/firestore";
+import { firestore, auth } from "../firebaseconfig"; 
+
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('')
@@ -27,12 +30,31 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     try {
-      await login(email, password)
-      router.push('/Home')
+      await login(email, password);
+      const user = auth.currentUser;
+  
+      if (user) {
+        const userRef = doc(firestore, "users", user.uid);
+        const userSnap = await getDoc(userRef);
+  
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          const hasSeenOnboarding = data.onboardingCompleted === true;
+  
+          if (hasSeenOnboarding) {
+            router.push("/Home");
+          } else {
+            router.push("/OnboardingScreen");
+          }
+        } else {
+          // default fallback if no user doc exists
+          router.push("/OnboardingScreen");
+        }
+      }
     } catch (error: any) {
-      Alert.alert('Login Error', error.message)
+      Alert.alert("Login Error", error.message);
     }
-  }
+  };
 
   return (
     <View style={styles.container}>

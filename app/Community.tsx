@@ -10,7 +10,7 @@ import {
   SafeAreaView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router, useRouter } from 'expo-router'
+import { router } from 'expo-router';
 import { firestore } from "../firebaseconfig";
 import { collection, getDocs, addDoc, query, orderBy } from "firebase/firestore";
 import axios from "axios";
@@ -32,16 +32,15 @@ type Report = {
   timestamp: number;
 };
 
-const Community = ({ navigation }: any) => {
+const Community = () => {
   const [reports, setReports] = useState<Report[]>([]);
   const [postcode, setPostcode] = useState("");
   const [message, setMessage] = useState("");
-  const [searchPostcode, setSearchPostcode] = useState("");
-  const [selectedDate, setSelectedDate] = useState(""); // for date filtering
-  const [user, setUser] = useState("Anonymous");
-  const [severity, setRiskLevel] = useState("Low");
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
+  const [severityFilter, setSeverityFilter] = useState("");
+  const [user, setUser] = useState("Anonymous");
+  const [severity, setRiskLevel] = useState("Low");
 
   useEffect(() => {
     fetchReports();
@@ -49,7 +48,7 @@ const Community = ({ navigation }: any) => {
 
   const fetchReports = async () => {
     try {
-      const q = query(collection(firestore, "community_reports"), orderBy("timestamp", "asc"));
+      const q = query(collection(firestore, "community_reports"), orderBy("timestamp", "desc"));
       const snapshot = await getDocs(q);
       const formatted = snapshot.docs.map((doc) => ({
         id: doc.id,
@@ -108,9 +107,11 @@ const Community = ({ navigation }: any) => {
     }
   };
 
-  const filteredReports = reports.filter((r) =>
-    r.postcode.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredReports = reports.filter((r) => {
+    const postcodeMatch = r.postcode.toLowerCase().includes(search.toLowerCase());
+    const severityMatch = severityFilter ? r.severity.toLowerCase() === severityFilter.toLowerCase() : true;
+    return postcodeMatch && severityMatch;
+  });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -118,11 +119,8 @@ const Community = ({ navigation }: any) => {
         <TouchableOpacity onPress={() => router.back()} style={styles.navIcon}>
           <Ionicons name="arrow-back-outline" size={26} color="#00FFFF" />
         </TouchableOpacity>
-        <Text style={styles.navTitle}>
-          <Text>Community </Text>
-          <Text style={styles.accent}>Reports</Text>
-        </Text>
-        <View style={{ width: 26 }} /> {/* Spacer */}
+        <Text style={styles.navTitle}>Community <Text style={styles.accent}>Reports</Text></Text>
+        <View style={{ width: 26 }} />
       </View>
 
       <View style={styles.card}>
@@ -134,7 +132,8 @@ const Community = ({ navigation }: any) => {
           onChangeText={setPostcode}
         />
         <TextInput
-          style={[styles.input, { height: 80 }]}
+          style={[styles.input, { height: 80 }]
+          }
           placeholder="Describe the issue"
           placeholderTextColor="#888"
           multiline
@@ -162,10 +161,10 @@ const Community = ({ navigation }: any) => {
       />
       <TextInput
         style={[styles.input, { marginBottom: 10 }]}
-        placeholder="Filter by date (yyyy-mm-dd)"
+        placeholder="Filter by risk level (e.g., High)"
         placeholderTextColor="#888"
-        value={dateFilter}
-        onChangeText={setDateFilter}
+        value={severityFilter}
+        onChangeText={setSeverityFilter}
       />
 
       <FlatList

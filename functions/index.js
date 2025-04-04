@@ -55,43 +55,6 @@ var formatPhoneNumber = function (phone) {
         return "+44".concat(trimmed.slice(1));
     return trimmed;
 };
-//send email
-app.post('/send-email', function (req, res) { return __awaiter(void 0, void 0, void 0, function () {
-    var _a, name, email, subject, message, response, result, error_1;
-    return __generator(this, function (_b) {
-        switch (_b.label) {
-            case 0:
-                _a = req.body, name = _a.name, email = _a.email, subject = _a.subject, message = _a.message;
-                _b.label = 1;
-            case 1:
-                _b.trys.push([1, 4, , 5]);
-                return [4 /*yield*/, fetch('https://api.emailjs.com/api/v1.0/email/send', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            service_id: 'service_scxm8hv',
-                            template_id: 'template_bstnkb7',
-                            user_id: 's--PIzv3HKywJoyBD',
-                            template_params: { name: name, email: email, subject: subject, message: message },
-                        }),
-                    })];
-            case 2:
-                response = _b.sent();
-                return [4 /*yield*/, response.text()];
-            case 3:
-                result = _b.sent();
-                res.status(response.status).send(result);
-                return [3 /*break*/, 5];
-            case 4:
-                error_1 = _b.sent();
-                console.error("❌ Email send failed:", error_1.message);
-                res.status(500).send({ error: "Email sending failed", details: error_1.message });
-                return [3 /*break*/, 5];
-            case 5: return [2 /*return*/];
-        }
-    });
-}); });
-
 
 // ✅ Correct POST route
 app.post("/send-alert", function (req, res) { return __awaiter(void 0, void 0, void 0, function () {

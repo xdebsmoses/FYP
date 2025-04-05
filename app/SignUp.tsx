@@ -1,9 +1,18 @@
 import React, { useState } from 'react';
 import { doc, setDoc } from "firebase/firestore";
 import { firestore } from "../firebaseconfig";
-import { View, Text, TextInput, Button, Alert, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  Alert,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { signUpWithEmail, sendVerificationEmail, updateUserProfile } from '../authService';
+import { Ionicons } from "@expo/vector-icons";
 
 export default function SignUpScreen() {
   const [name, setName] = useState('');
@@ -17,24 +26,21 @@ export default function SignUpScreen() {
       Alert.alert('Error', 'Please fill all the fields');
       return;
     }
-  
+
     try {
       const user = await signUpWithEmail(email, password, name, phone);
       await updateUserProfile(name);
       await sendVerificationEmail(user);
-  
-      // ✅ Create user doc with onboardingCompleted set to false
+
+      // Create user doc with onboardingCompleted flag
       await setDoc(doc(firestore, "users", user.uid), {
         name,
         email,
         phone,
-        onboardingCompleted: false, // 👈 flag for onboarding
+        onboardingCompleted: false,
       });
-  
-      Alert.alert(
-        'Success',
-        'Account created successfully. Please verify your email before logging in.'
-      );
+
+      Alert.alert('Success', 'Account created successfully. Please verify your email before logging in.');
       router.push('/Login');
     } catch (error: any) {
       Alert.alert('Sign-Up Error', error.message);
@@ -43,16 +49,19 @@ export default function SignUpScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Sign Up</Text>
+      <Text style={styles.title}>Create <Text style={styles.accent}>Account</Text></Text>
+
       <TextInput
         style={styles.input}
-        placeholder="Name"
+        placeholder="Full Name"
+        placeholderTextColor="#888"
         value={name}
         onChangeText={setName}
       />
       <TextInput
         style={styles.input}
-        placeholder="Email"
+        placeholder="Email Address"
+        placeholderTextColor="#888"
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
@@ -61,6 +70,7 @@ export default function SignUpScreen() {
       <TextInput
         style={styles.input}
         placeholder="Phone Number"
+        placeholderTextColor="#888"
         value={phone}
         onChangeText={setPhone}
         keyboardType="phone-pad"
@@ -68,17 +78,20 @@ export default function SignUpScreen() {
       <TextInput
         style={styles.input}
         placeholder="Password"
+        placeholderTextColor="#888"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
       />
-      <Button title="Sign Up" onPress={handleSignUp} />
 
-      {/* Go to Login Section */}
+      <TouchableOpacity style={styles.button} onPress={handleSignUp}>
+        <Text style={styles.buttonText}>Sign Up</Text>
+      </TouchableOpacity>
+
       <View style={styles.loginSection}>
         <Text style={styles.loginText}>Already have an account?</Text>
         <TouchableOpacity onPress={() => router.push('/Login')}>
-          <Text style={styles.loginLink}>Go to Login</Text>
+          <Text style={styles.loginLink}>Log In</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -88,37 +101,58 @@ export default function SignUpScreen() {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
+    backgroundColor: '#0B141E',
+    padding: 24,
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#fff',
   },
   title: {
-    fontSize: 24,
-    marginBottom: 20,
-    fontWeight: 'bold',
+    fontSize: 26,
+    fontFamily: 'Poppins',
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 30,
+  },
+  accent: {
+    color: '#00FFFF',
   },
   input: {
-    width: '100%',
-    height: 50,
+    backgroundColor: '#19232F',
+    color: '#fff',
+    fontFamily: 'Poppins',
+    borderRadius: 10,
+    borderColor: '#00FFFF',
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  button: {
+    backgroundColor: '#00FFFF',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  buttonText: {
+    color: '#000',
+    fontSize: 16,
+    fontFamily: 'Poppins',
+    fontWeight: '600',
   },
   loginSection: {
-    marginTop: 20,
     flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 24,
   },
   loginText: {
-    fontSize: 16,
-    color: '#555',
+    color: '#ccc',
+    fontSize: 14,
+    fontFamily: 'Poppins',
   },
   loginLink: {
-    fontSize: 16,
-    color: 'blue',
+    color: '#00FFFF',
+    fontSize: 14,
+    fontFamily: 'Poppins',
     marginLeft: 5,
     textDecorationLine: 'underline',
   },

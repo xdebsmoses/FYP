@@ -175,7 +175,7 @@ export default function SafeRouteMap() {
           <Ionicons name="arrow-back-outline" size={26} color="#00FFFF" />
         </TouchableOpacity>
         <Text style={[styles.navTitle, { color: "#fff" }]}>
-          Safety <Text style={{ color: "#00FFFF" }}>Group Chats</Text>
+          Safe <Text style={{ color: "#00FFFF" }}>Route Finder</Text>
         </Text>
         <View style={{ width: 26 }} /> {/* Placeholder for symmetry */}
       </View>

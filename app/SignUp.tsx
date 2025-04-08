@@ -30,22 +30,29 @@ export default function SignUpScreen() {
     try {
       const user = await signUpWithEmail(email, password, name, phone);
       await updateUserProfile(name);
-      await sendVerificationEmail(user);
-
-      // Create user doc with onboardingCompleted flag
+    
+      // Set onboarding flag in Firestore
       await setDoc(doc(firestore, "users", user.uid), {
         name,
         email,
         phone,
         onboardingCompleted: false,
-      });
-
-      Alert.alert('Success', 'Account created successfully. Please verify your email before logging in.');
+        createdAt: Date.now()
+      }, { merge: true });
+    
+      try {
+        await sendVerificationEmail(user);
+      } catch (emailErr) {
+        console.warn("Verification email failed to send:", emailErr);
+        // You can show a separate toast if you like
+      }
+    
+      Alert.alert('Success', 'Account created. Please verify your email before logging in.');
       router.push('/Login');
     } catch (error: any) {
       Alert.alert('Sign-Up Error', error.message);
     }
-  };
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>

@@ -49,7 +49,10 @@ export default function HomeScreen() {
         <TouchableOpacity onPress={() => navigateTo("/Profile")} style={styles.navIcon}>
           <Ionicons name="person-circle-outline" size={28} color="#00FFFF" />
         </TouchableOpacity>
-        <Text style={styles.navTitle}>CARE Dashboard</Text>
+        <Text style={styles.navTitle}>
+          <Text>CARE </Text>
+          <Text style={styles.accent}>Dashboard</Text>
+        </Text>
         <TouchableOpacity onPress={handleLogout} style={styles.navIcon}>
           <Ionicons name="log-out-outline" size={28} color="#00FFFF" />
         </TouchableOpacity>
@@ -107,6 +110,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#0B141E",
   },
+  navTitle: {
+    fontSize: 20,
+    fontFamily: "Poppins",
+    color: "#fff",
+  },
+  navIcon: {
+    padding: 4,
+  },
+  accent: {
+    color: "#00FFFF",
+  },
   navbar: {
     flexDirection: "row",
     alignItems: "center",
@@ -119,14 +133,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 4,
-  },
-  navTitle: {
-    fontSize: 20,
-    color: "#fff",
-    fontFamily: "Poppins",
-  },
-  navIcon: {
-    padding: 5,
   },
   scrollContent: {
     alignItems: "center",

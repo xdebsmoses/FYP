@@ -108,8 +108,10 @@ const Community = () => {
   };
 
   const filteredReports = reports.filter((r) => {
-    const postcodeMatch = r.postcode.toLowerCase().includes(search.toLowerCase());
-    const severityMatch = severityFilter ? r.severity.toLowerCase() === severityFilter.toLowerCase() : true;
+    const postcodeMatch = r.postcode?.toLowerCase().includes(search.toLowerCase()) ?? false;
+    const severityMatch = severityFilter
+      ? r.severity?.toLowerCase() === severityFilter.toLowerCase()
+      : true;
     return postcodeMatch && severityMatch;
   });
 

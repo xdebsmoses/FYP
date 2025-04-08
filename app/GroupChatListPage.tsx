@@ -100,7 +100,7 @@ const GroupChatListPage = () => {
       {/* Create new group chat */}
       <TextInput
         style={styles.input}
-        placeholder="Enter new chat name..."
+        placeholder="Enter new chat name and include location..."
         placeholderTextColor="#888"
         value={newChatName}
         onChangeText={setNewChatName}

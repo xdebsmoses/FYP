@@ -1,4 +1,4 @@
-// SafeRouteMap.tsx (restructured and commented)
+// SafeRouteMap.tsx (with transport mode popup and fixed risk scoring)
 import React, { useEffect, useState, useRef } from "react"
 import {
   View,
@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Alert,
   Platform,
-  ScrollView,
   Linking,
 } from "react-native"
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,23 +19,21 @@ import axios from "axios"
 import { database, firestore } from "../firebaseconfig"
 import { ref, onValue } from "firebase/database"
 import { collection, getDocs } from "firebase/firestore"
+import { FlatList } from "react-native"
 
-// Google Maps API Key
 const GOOGLE_MAPS_API_KEY = "AIzaSyAMEtUQMAfYifZOktg_QrGDzuUfbxOBkSs"
-
-// Default fallback location (Nottingham)
 const fallbackLocation = { latitude: 52.9545, longitude: -1.1587 }
 
 export default function SafeRouteMap() {
-  const [userLocation, setUserLocation] = useState(fallbackLocation) // user's current location
-  const [destination, setDestination] = useState("") // destination string
-  const [dangerZones, setDangerZones] = useState<any[]>([]) // Firebase and Firestore danger zones
-  const [routes, setRoutes] = useState<any[]>([]) // route options from Google Directions API
-  const [selectedRouteIndex, setSelectedRouteIndex] = useState<number | null>(null) // selected route index
-  const mapRef = useRef<MapView>(null) // reference to the map
+  const [userLocation, setUserLocation] = useState(fallbackLocation)
+  const [destination, setDestination] = useState("")
+  const [dangerZones, setDangerZones] = useState<any[]>([])
+  const [routes, setRoutes] = useState<any[]>([])
+  const [selectedRouteIndex, setSelectedRouteIndex] = useState<number | null>(null)
+  const [transportMode, setTransportMode] = useState<"walking" | "driving" | "bicycling">("walking")
+  const mapRef = useRef<MapView>(null)
   const navigation = useNavigation();
 
-  // On mount: get user location and fetch danger zones
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync()
@@ -51,33 +48,37 @@ export default function SafeRouteMap() {
       })
     })()
 
-    // Get danger zones from Realtime DB
     const dbRef = ref(database, "danger_zones")
     onValue(dbRef, (snapshot) => {
       const data = snapshot.val()
       if (data) {
         const formatted = Object.keys(data).map((key) => ({
-          ...data[key],
+          latitude: parseFloat(data[key].latitude),
+          longitude: parseFloat(data[key].longitude),
+          severity: data[key].severity?.toLowerCase() ?? "low",
+          description: data[key].description ?? "Realtime danger zone"
         }))
         setDangerZones(formatted)
       }
     })
 
-    // Fetch additional reports from Firestore
     const fetchFirestoreReports = async () => {
       const snapshot = await getDocs(collection(firestore, "community_reports"))
-      const reports = snapshot.docs.map((doc) => ({
-        ...doc.data(),
-        severity: doc.data().severity ?? 1,
-        description: doc.data().message || "Community report",
-      }))
+      const reports = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          latitude: parseFloat(data.latitude),
+          longitude: parseFloat(data.longitude),
+          severity: data.severity?.toLowerCase() ?? "low",
+          description: data.message || "Community report"
+        };
+      })
       setDangerZones((prev) => [...prev, ...reports])
     }
 
     fetchFirestoreReports()
   }, [])
 
-  // Decode polyline returned from Google API
   const decodePolyline = (encoded: string) => {
     let index = 0, lat = 0, lng = 0, coordinates = []
     const factor = 1e5
@@ -103,36 +104,38 @@ export default function SafeRouteMap() {
     return coordinates
   }
 
-  // Compute risk score based on proximity to danger zones
+  const severityScoreMap: Record<string, number> = {
+    low: 1,
+    medium: 2,
+    high: 3,
+  }
+
   const calculateRiskScore = (coords: any[]) => {
-    let score = 0
+    let maxSeverity = 0
     const threshold = 100
     for (const zone of dangerZones) {
+      const score = severityScoreMap[zone.severity] || 0
       for (const point of coords) {
         const dx = point.latitude - zone.latitude
         const dy = point.longitude - zone.longitude
-        const d = Math.sqrt(dx * dx + dy * dy) * 111000
-        if (d < threshold) {
-          score += zone.severity
-          break
+        const distance = Math.sqrt(dx * dx + dy * dy) * 111000
+        if (distance < threshold && score > maxSeverity) {
+          maxSeverity = score
         }
       }
     }
-    return score
+    return maxSeverity
   }
 
-  // Format duration in human readable format
   const formatDuration = (seconds: number) => {
     const min = Math.floor(seconds / 60)
     const hr = Math.floor(min / 60)
     return hr ? `${hr} hr ${min % 60} min` : `${min} mins`
   }
 
-  // Fetch directions from Google API
-  const handleSearch = async () => {
-    if (!destination) return
+  const handleSearch = async (mode: "walking" | "driving" | "bicycling") => {
     const origin = `${userLocation.latitude},${userLocation.longitude}`
-    const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}&alternatives=true&key=${GOOGLE_MAPS_API_KEY}`
+    const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}&alternatives=true&mode=${mode}&key=${GOOGLE_MAPS_API_KEY}`
     try {
       const { data } = await axios.get(url)
       const colors = ["blue", "green", "orange", "purple", "red"]
@@ -156,67 +159,63 @@ export default function SafeRouteMap() {
     }
   }
 
-  // Open the selected route in native maps app
+  const askTransportMode = () => {
+    Alert.alert("Select Transport Mode", "How are you traveling?", [
+      { text: "Walking", onPress: () => { setTransportMode("walking"); handleSearch("walking") } },
+      { text: "Driving", onPress: () => { setTransportMode("driving"); handleSearch("driving") } },
+      { text: "Cycling", onPress: () => { setTransportMode("bicycling"); handleSearch("bicycling") } },
+    ])
+  }
+
   const openInMaps = () => {
     if (!userLocation || selectedRouteIndex === null) return
     const dest = routes[selectedRouteIndex].coordinates.at(-1)
-    const link =
-      Platform.OS === "ios"
-        ? `maps://?saddr=${userLocation.latitude},${userLocation.longitude}&daddr=${dest.latitude},${dest.longitude}`
-        : `https://www.google.com/maps/dir/?api=1&origin=${userLocation.latitude},${userLocation.longitude}&destination=${dest.latitude},${dest.longitude}`
+    const modeFlag = transportMode === "walking" ? "w" : transportMode === "driving" ? "d" : "b"
+    const link = Platform.OS === "ios"
+      ? `maps://?saddr=${userLocation.latitude},${userLocation.longitude}&daddr=${dest.latitude},${dest.longitude}&dirflg=${modeFlag}`
+      : `https://www.google.com/maps/dir/?api=1&origin=${userLocation.latitude},${userLocation.longitude}&destination=${dest.latitude},${dest.longitude}&travelmode=${transportMode}`
     Linking.openURL(link)
   }
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Custom Navbar */}
+      {/* Navigation bar */}
       <View style={styles.navbar}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.navIcon}>
           <Ionicons name="arrow-back-outline" size={26} color="#00FFFF" />
         </TouchableOpacity>
-        <Text style={[styles.navTitle, { color: "#fff" }]}>
-          Safe <Text style={{ color: "#00FFFF" }}>Route Finder</Text>
-        </Text>
-        <View style={{ width: 26 }} /> {/* Placeholder for symmetry */}
+        <Text style={[styles.navTitle, { color: "#fff" }]}>Safe <Text style={{ color: "#00FFFF" }}>Route Finder</Text></Text>
+        <View style={{ width: 26 }} />
       </View>
-      {/* Map with markers and polylines */}
+
+      {/* Map View */}
       <MapView
         ref={mapRef}
         style={styles.map}
-        initialRegion={{
-          ...userLocation,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        }}
-      >
-        {/* User marker */}
-        {userLocation && (
-          <Marker coordinate={userLocation} title="You are here" pinColor="#00FFFF" />
+        initialRegion={{ ...userLocation, latitudeDelta: 0.05, longitudeDelta: 0.05 }}>
+
+        {userLocation && <Marker coordinate={userLocation} title="You are here" pinColor="#00FFFF" />}
+
+        {routes.length > 0 && selectedRouteIndex !== null && (
+          <Marker coordinate={routes[selectedRouteIndex].coordinates.at(-1)} title="Destination" pinColor="green" />
         )}
 
-        {/* Danger zones */}
         {dangerZones.map((z, i) => (
           <Marker
             key={i}
             coordinate={{ latitude: z.latitude, longitude: z.longitude }}
-            pinColor={z.severity >= 4 ? "red" : "orange"}
+            pinColor={z.severity === "high" ? "red" : z.severity === "medium" ? "orange" : "yellow"}
             title={`Severity ${z.severity}`}
             description={z.description}
           />
         ))}
 
-        {/* Routes */}
         {routes.map((r, i) => (
-          <Polyline
-            key={i}
-            coordinates={r.coordinates}
-            strokeColor={r.color}
-            strokeWidth={selectedRouteIndex === i ? 6 : 3}
-          />
+          <Polyline key={i} coordinates={r.coordinates} strokeColor={r.color} strokeWidth={selectedRouteIndex === i ? 6 : 3} />
         ))}
       </MapView>
 
-      {/* Search input */}
+      {/* Search Bar */}
       <View style={styles.searchBar}>
         <TextInput
           placeholder="Enter destination..."
@@ -225,152 +224,97 @@ export default function SafeRouteMap() {
           onChangeText={setDestination}
           style={styles.input}
         />
-        <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
+        <TouchableOpacity style={styles.searchButton} onPress={askTransportMode}>
           <Text style={styles.searchButtonText}>Search</Text>
         </TouchableOpacity>
       </View>
 
       {/* Route Cards */}
       {routes.length > 0 && (
-        <ScrollView horizontal style={styles.routeList} contentContainerStyle={{ padding: 10 }}>
-          {routes.map((r, i) => (
+        <FlatList
+          horizontal
+          style={styles.routeList}
+          contentContainerStyle={{ padding: 10 }}
+          data={routes}
+          keyExtractor={(item, index) => `route-${index}`}
+          renderItem={({ item, index }) => (
             <TouchableOpacity
-              key={i}
-              style={[styles.routeCard, selectedRouteIndex === i && styles.selectedCard]}
-              onPress={() => setSelectedRouteIndex(i)}
-            >
+              style={[styles.routeCard, selectedRouteIndex === index && styles.selectedCard]}
+              onPress={() => setSelectedRouteIndex(index)}>
               <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
-                <View style={[styles.colorCircle, { backgroundColor: r.color }]} />
-                <Text style={styles.cardTitle}>Route {i + 1}</Text>
+                <View style={[styles.colorCircle, { backgroundColor: item.color }]} />
+                <Text style={styles.cardTitle}>Route {index + 1}</Text>
               </View>
-              <Text style={styles.cardText}>Duration: {r.duration}</Text>
-              <Text style={styles.cardText}>Risk Score: {r.riskScore}</Text>
+              <Text style={styles.cardText}>Duration: {item.duration}</Text>
+              <Text style={styles.cardText}>Severity: {item.riskScore === 3 ? "High" : item.riskScore === 2 ? "Medium" : item.riskScore === 1 ? "Low" : "None"}</Text>
               <TouchableOpacity style={styles.navigateBtn} onPress={openInMaps}>
                 <Text style={styles.navigateBtnText}>Navigate</Text>
               </TouchableOpacity>
             </TouchableOpacity>
-          ))}
-        </ScrollView>
+          )}
+        />
       )}
     </SafeAreaView>
   )
 }
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0B141E" },
   map: { flex: 1 },
   searchBar: {
-    position: "absolute",
-    top: 150,
-    left: 20,
-    right: 20,
-    flexDirection: "row",
-    backgroundColor: "#19232F",
-    borderRadius: 10,
-    padding: 8,
-    alignItems: "center",
+    position: "absolute", top: 150, left: 20, right: 20,
+    flexDirection: "row", backgroundColor: "#19232F",
+    borderRadius: 10, padding: 8, alignItems: "center",
   },
   input: {
-    flex: 1,
-    padding: 10,
-    color: "#fff",
-    backgroundColor: "#0B141E",
-    borderRadius: 6,
-    fontSize: 14,
-    fontFamily: "Poppins",
-    borderColor: "#00FFFF",
-    borderWidth: 1,
+    flex: 1, padding: 10, color: "#fff",
+    backgroundColor: "#0B141E", borderRadius: 6,
+    fontSize: 14, fontFamily: "Poppins",
+    borderColor: "#00FFFF", borderWidth: 1,
   },
   searchButton: {
-    marginLeft: 10,
-    backgroundColor: "#00FFFF",
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    marginLeft: 10, backgroundColor: "#00FFFF",
+    paddingVertical: 10, paddingHorizontal: 16,
     borderRadius: 6,
   },
   searchButtonText: {
-    color: "#000",
-    fontWeight: "600",
-    fontFamily: "Poppins",
+    color: "#000", fontWeight: "600", fontFamily: "Poppins",
   },
-  routeList: {
-    position: "absolute",
-    bottom: 20,
-  },
+  routeList: { position: "absolute", bottom: 20 },
   routeCard: {
-    backgroundColor: "#19232F",
-    borderRadius: 10,
-    padding: 12,
-    marginHorizontal: 6,
-    width: 180,
-    elevation: 4,
-    shadowColor: "#000",
+    backgroundColor: "#19232F", borderRadius: 10,
+    padding: 12, marginHorizontal: 6, width: 180,
+    elevation: 4, shadowColor: "#000",
   },
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#0B141E",
-  },
-  
+  safeArea: { flex: 1, backgroundColor: "#0B141E" },
   navbar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    backgroundColor: "#19232F",
-    borderBottomWidth: 1,
-    borderBottomColor: "#0B141E",
-    zIndex: 10,
+    flexDirection: "row", alignItems: "center",
+    justifyContent: "space-between", paddingHorizontal: 20,
+    paddingVertical: 14, backgroundColor: "#19232F",
+    borderBottomWidth: 1, borderBottomColor: "#0B141E", zIndex: 10,
   },
-  
-  navIcon: {
-    padding: 4,
-  },
-  
-  navTitle: {
-    fontSize: 20,
-    fontFamily: "Poppins",
-    color: "#fff",
-  },
-  
-  accent: {
-    color: "#00FFFF",
-  },
-  selectedCard: {
-    borderColor: "#00FFFF",
-    borderWidth: 2,
-  },
+  navIcon: { padding: 4 },
+  navTitle: { fontSize: 20, fontFamily: "Poppins", color: "#fff" },
+  selectedCard: { borderColor: "#00FFFF", borderWidth: 2 },
   cardTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#fff",
-    fontFamily: "Poppins",
-    marginBottom: 6,
+    fontSize: 16, fontWeight: "bold", color: "#fff",
+    fontFamily: "Poppins", marginBottom: 6,
   },
   cardText: {
-    color: "#ccc",
-    fontSize: 14,
-    fontFamily: "Poppins",
-    marginBottom: 4,
+    color: "#ccc", fontSize: 14,
+    fontFamily: "Poppins", marginBottom: 4,
   },
   navigateBtn: {
-    marginTop: 8,
-    backgroundColor: "#00FFFF",
-    borderRadius: 6,
-    paddingVertical: 6,
+    marginTop: 8, backgroundColor: "#00FFFF",
+    borderRadius: 6, paddingVertical: 6,
     alignItems: "center",
   },
   colorCircle: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: "#00FFFF", // fallback color
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: "#ccc", // helps visibility
+    width: 14, height: 14, borderRadius: 7,
+    backgroundColor: "#00FFFF", marginRight: 8,
+    borderWidth: 1, borderColor: "#ccc",
   },
   navigateBtnText: {
-    color: "#000",
-    fontWeight: "600",
-    fontFamily: "Poppins",
+    color: "#000", fontWeight: "600", fontFamily: "Poppins",
   },
 })

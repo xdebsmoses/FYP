@@ -18,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { useNavigation } from "@react-navigation/native";
 
+// -- IMPORTANT: Keep your actual keys in a secure file/environment variable.
 const API_KEY = "AIzaSyAMr1uOSFSw7U4EXTODbXJHfpbt4Kxgg3A";
 const genAI = new GoogleGenerativeAI(API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
@@ -80,13 +81,13 @@ export default function Chatbot() {
         item.isUser ? styles.userBubble : styles.botBubble,
       ]}
     >
+      {/* Robot Icon only for bot messages */}
       {!item.isUser && (
-        <Image
-          source={require("../assets/robot.png")}
-          style={styles.robotIcon}
-        />
+        <Image source={require("../assets/robot.png")} style={styles.robotIcon} />
       )}
-      <Text style={item.isUser ? styles.userText : styles.botText}>{item.text}</Text>
+      <Text style={item.isUser ? styles.userText : styles.botText}>
+        {item.text}
+      </Text>
     </View>
   );
 
@@ -94,15 +95,35 @@ export default function Chatbot() {
     <SafeAreaView style={styles.safeArea}>
       {/* Navbar */}
       <View style={styles.navbar}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.navIcon}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.navIcon}
+        >
           <Ionicons name="arrow-back-outline" size={26} color="#00FFFF" />
         </TouchableOpacity>
-        <Text style={styles.navTitle}>CARE <Text style={styles.accent}>Chatbot</Text></Text>
+        <Text style={styles.navTitle}>
+          CARE <Text style={styles.accent}>Chatbot</Text>
+        </Text>
         <View style={{ width: 26 }} />
       </View>
 
       {/* Keyboard Avoiding Wrapper */}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        {/* [ADDITION] Brief Explanation / Guide */}
+        <View style={styles.infoContainer}>
+          <Text style={styles.infoText}>
+            Welcome to the CARE Chatbot! Here, you can ask questions about personal
+            safety, request emotional support, or explore Bible verses for comfort.
+            For example, try asking:
+          </Text>
+          <Text style={styles.exampleText}>• "How can I stay safe when walking alone at night?"</Text>
+          <Text style={styles.exampleText}>• "Please give me a comforting Bible verse."</Text>
+          <Text style={styles.exampleText}>• "What should I do if I feel I’m being followed?"</Text>
+        </View>
+
         {/* Chat List */}
         <FlatList
           ref={scrollRef}
@@ -114,7 +135,9 @@ export default function Chatbot() {
         />
 
         {/* Loading Spinner */}
-        {isLoading && <ActivityIndicator color="#00FFFF" style={{ marginVertical: 8 }} />}
+        {isLoading && (
+          <ActivityIndicator color="#00FFFF" style={{ marginVertical: 8 }} />
+        )}
 
         {/* Input Section */}
         <View style={styles.inputSection}>
@@ -223,5 +246,28 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     resizeMode: "contain",
+  },
+
+  // [ADDITION] Additional styling for the info area
+  infoContainer: {
+    backgroundColor: "#19232F",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#0B141E",
+  },
+  infoText: {
+    color: "#fff",
+    fontSize: 14,
+    fontFamily: "Poppins",
+    marginBottom: 6,
+    lineHeight: 20,
+  },
+  exampleText: {
+    color: "#fff",
+    fontSize: 13,
+    marginLeft: 8,
+    fontFamily: "Poppins",
+    lineHeight: 20,
   },
 });

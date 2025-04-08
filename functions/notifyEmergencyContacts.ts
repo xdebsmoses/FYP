@@ -18,7 +18,7 @@ export const notifyEmergencyContacts = async () => {
     for (const contact of contacts) {
       const message = `🚨 Hi ${contact.name}, ${senderName} may be in danger and said a trigger word!`;
 
-      await fetch("http://10.76.71.143:3000/send-alert", {
+      await fetch("http://172.20.10.2:3000/send-alert", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

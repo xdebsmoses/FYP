@@ -24,9 +24,6 @@ export default function SpeakScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const navigation = useNavigation();
 
-  // 🎙️ Trigger words to listen for
-  const TRIGGER_WORDS = ["help", "emergency", "danger", "i'm scared", "call police", "stop"];
-
   // 🔘 Start or stop recording
   const handleRecordToggle = async () => {
     if (isRecording) {
@@ -71,7 +68,7 @@ export default function SpeakScreen() {
 
       {/* 🎙️ Center Display */}
       <View style={styles.content}>
-        <Text style={styles.heading}>Tap the mic to start listening</Text>
+       <Text style={styles.heading}>🎙️ Tap the mic to start listening</Text>
 
         <Pressable
           style={[styles.recordButton, isRecording && styles.recording]}

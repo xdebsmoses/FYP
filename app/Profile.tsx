@@ -6,7 +6,6 @@ import {
   FlatList,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   Alert,
   SafeAreaView,
 } from "react-native";
@@ -16,7 +15,6 @@ import {
   doc,
   getDoc,
   setDoc,
-  updateDoc,
   deleteDoc,
 } from "firebase/firestore";
 import { deleteUser } from "firebase/auth";
@@ -31,7 +29,6 @@ const Profile = () => {
   const [newContact, setNewContact] = useState({ name: "", phone: "" });
   const [triggerWords, setTriggerWords] = useState("");
 
-  // Load user profile data
   useEffect(() => {
     if (!user) return;
     const fetchUserData = async () => {
@@ -52,7 +49,6 @@ const Profile = () => {
     fetchUserData();
   }, [user]);
 
-  // Save all user data
   const handleSave = async () => {
     if (!user) return;
     try {
@@ -105,62 +101,81 @@ const Profile = () => {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.sectionTitle}>Personal Details</Text>
-        <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Name" placeholderTextColor="#888" />
-        <TextInput style={styles.input} value={phone} onChangeText={setPhone} placeholder="Phone" keyboardType="phone-pad" placeholderTextColor="#888" />
+      {/* FlatList as main container */}
+      <FlatList
+        data={emergencyContacts}
+        keyExtractor={(_, i) => i.toString()}
+        contentContainerStyle={styles.container}
+        ListHeaderComponent={
+          <>
+            <Text style={styles.sectionTitle}>Personal Details</Text>
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="Name"
+              placeholderTextColor="#888"
+            />
+            <TextInput
+              style={styles.input}
+              value={phone}
+              onChangeText={setPhone}
+              placeholder="Phone"
+              keyboardType="phone-pad"
+              placeholderTextColor="#888"
+            />
 
-        {/* Emergency Contacts */}
-        <Text style={styles.sectionTitle}>Emergency Contacts</Text>
-        <FlatList
-          data={emergencyContacts}
-          keyExtractor={(_, i) => i.toString()}
-          renderItem={({ item, index }) => (
-            <View style={styles.contactItem}>
-              <Text style={styles.contactText}>{item.name} - {item.phone}</Text>
-              <TouchableOpacity onPress={() => removeContact(index)}>
-                <Ionicons name="trash-outline" size={18} color="red" />
-              </TouchableOpacity>
-            </View>
-          )}
-        />
-        <TextInput
-          style={styles.input}
-          value={newContact.name}
-          placeholder="Contact Name"
-          placeholderTextColor="#888"
-          onChangeText={(text) => setNewContact({ ...newContact, name: text })}
-        />
-        <TextInput
-          style={styles.input}
-          value={newContact.phone}
-          placeholder="Contact Phone"
-          placeholderTextColor="#888"
-          keyboardType="phone-pad"
-          onChangeText={(text) => setNewContact({ ...newContact, phone: text })}
-        />
-        <TouchableOpacity style={styles.button} onPress={addEmergencyContact}>
-          <Text style={styles.buttonText}>Add Contact</Text>
-        </TouchableOpacity>
+            <Text style={styles.sectionTitle}>Emergency Contacts</Text>
+          </>
+        }
+        renderItem={({ item, index }) => (
+          <View style={styles.contactItem}>
+            <Text style={styles.contactText}>{item.name} - {item.phone}</Text>
+            <TouchableOpacity onPress={() => removeContact(index)}>
+              <Ionicons name="trash-outline" size={18} color="red" />
+            </TouchableOpacity>
+          </View>
+        )}
+        ListFooterComponent={
+          <>
+            <TextInput
+              style={styles.input}
+              value={newContact.name}
+              placeholder="Contact Name"
+              placeholderTextColor="#888"
+              onChangeText={(text) => setNewContact({ ...newContact, name: text })}
+            />
+            <TextInput
+              style={styles.input}
+              value={newContact.phone}
+              placeholder="Contact Phone"
+              placeholderTextColor="#888"
+              keyboardType="phone-pad"
+              onChangeText={(text) => setNewContact({ ...newContact, phone: text })}
+            />
+            <TouchableOpacity style={styles.button} onPress={addEmergencyContact}>
+              <Text style={styles.buttonText}>Add Contact</Text>
+            </TouchableOpacity>
 
-        {/* Trigger Words */}
-        <Text style={styles.sectionTitle}>Trigger Words</Text>
-        <TextInput
-          style={styles.input}
-          value={triggerWords}
-          placeholder="e.g. help, danger, emergency"
-          placeholderTextColor="#888"
-          onChangeText={setTriggerWords}
-        />
+            <Text style={styles.sectionTitle}>Trigger Words</Text>
+            <TextInput
+              style={styles.input}
+              value={triggerWords}
+              placeholder="e.g. help, danger, emergency"
+              placeholderTextColor="#888"
+              onChangeText={setTriggerWords}
+            />
 
-        <TouchableOpacity style={styles.button} onPress={handleSave}>
-          <Text style={styles.buttonText}>Save Changes</Text>
-        </TouchableOpacity>
+            <TouchableOpacity style={styles.button} onPress={handleSave}>
+              <Text style={styles.buttonText}>Save Changes</Text>
+            </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.button, styles.deleteBtn]} onPress={handleDeleteAccount}>
-          <Text style={styles.deleteText}>Delete My Account</Text>
-        </TouchableOpacity>
-      </ScrollView>
+            <TouchableOpacity style={[styles.button, styles.deleteBtn]} onPress={handleDeleteAccount}>
+              <Text style={styles.deleteText}>Delete My Account</Text>
+            </TouchableOpacity>
+          </>
+        }
+      />
     </SafeAreaView>
   );
 };

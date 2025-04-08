@@ -13,7 +13,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 
 import { recordSpeech } from "../functions/recordSpeech";
-import { transcribeSpeech, saveTranscriptToFirestore, checkTriggerWords } from "../functions/transcribeSpeech";
+import {
+  transcribeSpeech,
+  saveTranscriptToFirestore,
+  checkTriggerWords,
+} from "../functions/transcribeSpeech";
 import { notifyEmergencyContacts } from "../functions/notifications";
 import { auth } from "../firebaseconfig";
 
@@ -24,7 +28,6 @@ export default function SpeakScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const navigation = useNavigation();
 
-  // 🔘 Start or stop recording
   const handleRecordToggle = async () => {
     if (isRecording) {
       setIsRecording(false);
@@ -63,12 +66,12 @@ export default function SpeakScreen() {
         <Text style={styles.navTitle}>
           Virtual <Text style={styles.accent}>Listening</Text>
         </Text>
-        <View style={{ width: 24 }} /> {/* Spacer for symmetry */}
+        <View style={{ width: 24 }} />
       </View>
 
-      {/* 🎙️ Center Display */}
+      {/* 🎙️ Content */}
       <View style={styles.content}>
-       <Text style={styles.heading}>🎙️ Tap the mic to start listening</Text>
+        <Text style={styles.heading}>🎙️ Tap the mic to start listening</Text>
 
         <Pressable
           style={[styles.recordButton, isRecording && styles.recording]}
@@ -94,7 +97,6 @@ export default function SpeakScreen() {
   );
 }
 
-// 🖌️ Styles
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,

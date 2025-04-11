@@ -56,9 +56,9 @@ export const transcribeSpeech = async (
       languageCode: "en-US",
     };
 
-    //const LOCAL_IP = "172.20.10.2"; INTERNET IP
+    //const LOCAL_IP = "10.76.71.143"; INTERNET IP
     // hotsop ip
-    const LOCAL_IP = "172.20.10.2";
+    const LOCAL_IP = "10.76.71.143";
     const serverUrl = `http://${LOCAL_IP}:4000/speech-to-text`;
 
     const response = await fetch(serverUrl, {

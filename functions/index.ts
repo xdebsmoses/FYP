@@ -64,5 +64,5 @@ app.post("/send-alert", async (req: Request, res: Response) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 CARE backend running on http://172.20.10.2:${PORT}`);
+  console.log(`🚀 CARE backend running on http://10.76.71.143:${PORT}`);
 });

@@ -112,5 +112,5 @@ app.post("/send-alert", function (req, res) { return __awaiter(void 0, void 0, v
 }); });
 var PORT = process.env.PORT || 3000;
 app.listen(PORT, function () {
-    console.log("\uD83D\uDE80 CARE backend running on http://172.20.10.2:".concat(PORT));
+    console.log("\uD83D\uDE80 CARE backend running on http://10.76.71.143:".concat(PORT));
 });
